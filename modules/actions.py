@@ -16,6 +16,14 @@ import json
 import shutil
 import subprocess
 
+try:
+    import evdev
+    from evdev import UInput, ecodes as e
+    UINPUT_MOUSE = UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT]}, name="bombcrypto-uinput-mouse")
+except Exception as uinput_err:
+    UINPUT_MOUSE = None
+    print(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
+
 HAS_HYPRCTL = shutil.which("hyprctl") is not None
 
 def get_hyprland_scale():
@@ -44,31 +52,41 @@ class ActionEngine:
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
-        Supports Hyprland Wayland native hardware cursor positioning and compositor clicking.
+        Uses uinput kernel device for 100% native hardware clicking under Wayland/Hyprland.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
+        # 1. Position hardware cursor via Hyprland hyprctl
         if HAS_HYPRCTL:
             try:
                 scale = get_hyprland_scale()
                 logic_x = int(target_x / scale)
                 logic_y = int(target_y / scale)
-                # 1. Move hardware cursor
                 subprocess.run(["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(0.15)
-                # 2. Dispatch native Hyprland Wayland mouse click
-                subprocess.run(["hyprctl", "dispatch", "mouse", "click", "left"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"[ACTION] Dispatched Hyprland native click at ({target_x}, {target_y}) [Scaled: ({logic_x}, {logic_y})]")
-                return
-            except Exception as e:
-                print(f"[ACTION] Warning: hyprctl click failed ({e}). Falling back to pyautogui.")
+            except Exception:
+                pass
 
-        # Fallback to PyAutoGUI click
         try:
             pyautogui.moveTo(target_x, target_y)
         except Exception:
             pass
+
+        # 2. Perform native kernel uinput click if available
+        if UINPUT_MOUSE:
+            try:
+                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                UINPUT_MOUSE.syn()
+                time.sleep(0.10)
+                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                UINPUT_MOUSE.syn()
+                print(f"[ACTION] Performed native kernel uinput click at physical ({target_x}, {target_y})")
+                return
+            except Exception as err:
+                print(f"[ACTION] Warning: uinput click failed ({err}). Falling back to pyautogui.")
+
+        # Fallback to PyAutoGUI click
         pyautogui.mouseDown(button='left')
         time.sleep(0.10)
         pyautogui.mouseUp(button='left')
