@@ -1,66 +1,107 @@
+import argparse
+import logging
 import os
 import sys
 import time
 import types
 
-# Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
 if "mouseinfo" not in sys.modules:
     dummy_mouseinfo = types.ModuleType("mouseinfo")
     dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
     sys.modules["mouseinfo"] = dummy_mouseinfo
 
-# Add local path to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
 from modules.bot_logic import BombCryptoBot
 from modules.browser import BraveManager
+from modules.logger import logger, setup_logging
+from modules.notifications import NotificationManager
 
 
-class Logger:
-    def __init__(self, filename=config.LOG_FILE_PATH):
-        self.terminal = sys.stdout
-        self.log = open(filename, "a", encoding="utf-8")
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
-
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
-
-
-sys.stdout = Logger()
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Bomb Crypto Automation Bot - Anti-detection & Vision-driven decision engine"
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=config.HERO_WORK_INTERVAL_MINUTES,
+        help="Hero work cycle interval in minutes (default: 30)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Dry run mode: simulates actions and vision matching without physical mouse clicking",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=config.DEFAULT_MATCH_THRESHOLD,
+        help="Override global template matching confidence threshold (0.0 - 1.0)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Disable browser auto-launch (assumes browser is managed externally)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable detailed debug-level logging",
+    )
+    return parser.parse_args()
 
 
 def main():
+    args = parse_args()
+
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    setup_logging(level=log_level)
+
+    config.HERO_WORK_INTERVAL_MINUTES = args.interval
+    config.DRY_RUN = args.dry_run
+    config.DEFAULT_MATCH_THRESHOLD = args.threshold
+    if args.headless:
+        config.AUTO_LAUNCH_BRAVE = False
+
     browser_info = BraveManager.get_attached_browser_info()
 
-    print("==================================================")
-    print("           BOMB CRYPTO AUTOMATION BOT             ")
-    print("==================================================")
-    print(" [ATTACHED BROWSER INFO]")
-    print(f"  • Name:       {browser_info['name']}")
-    print(f"  • Process ID: PID {browser_info['pid']}")
-    print(f"  • Binary Exe: {browser_info['exe']}")
-    print(f"  • Status:     {browser_info['status']}")
-    print("--------------------------------------------------")
-    print(f"  • Direct URL: {config.DIRECT_TREASURE_URL}")
-    print(f"  • Interval:   {config.HERO_WORK_INTERVAL_MINUTES} minutes hero work cycle")
-    print(f"  • Targets:    {config.TARGETS_DIR}")
-    print("==================================================")
-    print("Press Ctrl+C or move mouse to screen corner to exit.\n")
+    logger.info("==================================================")
+    logger.info("           BOMB CRYPTO AUTOMATION BOT             ")
+    logger.info("==================================================")
+    logger.info(" [ATTACHED BROWSER INFO]")
+    logger.info(f"  • Name:       {browser_info['name']}")
+    logger.info(f"  • Process ID: PID {browser_info['pid']}")
+    logger.info(f"  • Binary Exe: {browser_info['exe']}")
+    logger.info(f"  • Status:     {browser_info['status']}")
+    logger.info("--------------------------------------------------")
+    logger.info(" [CLI CONFIGURATION]")
+    logger.info(f"  • Direct URL: {config.DIRECT_TREASURE_URL}")
+    logger.info(f"  • Interval:   {config.HERO_WORK_INTERVAL_MINUTES} minutes hero work cycle")
+    logger.info(f"  • Threshold:  {config.DEFAULT_MATCH_THRESHOLD:.2f} default match threshold")
+    logger.info(
+        f"  • Dry-Run:    {'ENABLED (Simulation)' if config.DRY_RUN else 'Disabled (Live Actions)'}"
+    )
+    logger.info(
+        f"  • Headless:   {'Disabled Auto-Launch' if args.headless else 'Auto-Launch Enabled'}"
+    )
+    logger.info(f"  • Targets:    {config.TARGETS_DIR}")
+    logger.info("==================================================")
+    logger.info("Press Ctrl+C or move mouse to screen corner to exit.\n")
 
-    # Verify Brave browser status
+    NotificationManager.send_notification(
+        "Bomb Crypto Bot Initialized",
+        f"Bot started with interval={config.HERO_WORK_INTERVAL_MINUTES}m, dry_run={config.DRY_RUN}.",
+        level="info",
+    )
+
     if config.AUTO_LAUNCH_BRAVE:
         BraveManager.verify_and_ensure_brave()
 
-    # Verify targets directory exists
     if not os.path.exists(config.TARGETS_DIR):
-        print(f"[ERROR] Target images folder not found at: {config.TARGETS_DIR}")
-        print("Please create the 'targets' directory and add your template PNG images.")
+        logger.error(f"Target images folder not found at: {config.TARGETS_DIR}")
+        logger.error("Please create the 'targets' directory and add your template PNG images.")
         return
 
     bot = BombCryptoBot()
@@ -68,12 +109,17 @@ def main():
     try:
         while True:
             bot.run_cycle()
-            # Sleep between cycles (scan for errors every config.ERROR_CHECK_INTERVAL_SECONDS)
             time.sleep(config.ERROR_CHECK_INTERVAL_SECONDS)
     except KeyboardInterrupt:
-        print("\n[BOT] Bot manually stopped by user (Ctrl+C). Exiting...")
+        logger.info("[BOT] Bot manually stopped by user (Ctrl+C). Exiting...")
+        NotificationManager.send_notification(
+            "Bomb Crypto Bot Stopped", "Bot manually stopped by user (Ctrl+C).", level="warning"
+        )
     except Exception as e:
-        print(f"\n[ERROR] Unexpected exception occurred: {e}")
+        logger.error(f"[ERROR] Unexpected exception occurred: {e}", exc_info=True)
+        NotificationManager.send_notification(
+            "Bomb Crypto Bot Error Crash", f"Unexpected exception: {e}", level="error"
+        )
 
 
 if __name__ == "__main__":

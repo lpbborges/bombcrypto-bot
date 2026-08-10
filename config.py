@@ -40,6 +40,12 @@ IDLE_JITTER_INTERVAL_SECONDS = 30  # Minimum seconds between anti-AFK mouse jitt
 IDLE_JITTER_MAX_OFFSET = 15  # Max pixel variation for idle jitter
 
 
+DRY_RUN = False
+ENABLE_NOTIFICATIONS = True
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
 # Bot Logic Timers (in seconds)
 HERO_WORK_INTERVAL_MINUTES = 30  # Time to sleep while heroes mine / recover stamina
 ERROR_CHECK_INTERVAL_SECONDS = 15  # Frequency to scan for game errors/disconnects

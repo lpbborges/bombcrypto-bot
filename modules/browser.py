@@ -3,6 +3,7 @@ import shutil
 import subprocess
 
 import config
+from modules.logger import logger
 
 KNOWN_BRAVE_PATHS = [
     "/opt/brave.com/brave-origin-beta/brave",
@@ -62,7 +63,7 @@ class BraveManager:
                                 "status": "ATTACHED & RUNNING",
                             }
         except Exception as e:
-            print(f"[BROWSER] Warning querying process table: {e}")
+            logger.warning(f"[BROWSER] Warning querying process table: {e}")
 
         # If brave executable is found on system but not currently running
         exe = BraveManager.find_brave_executable()
@@ -112,11 +113,11 @@ class BraveManager:
         """
         exe = BraveManager.find_brave_executable()
         if exe:
-            print(f"[BROWSER] Launching Brave browser ({exe}) -> {url}")
+            logger.info(f"[BROWSER] Launching Brave browser ({exe}) -> {url}")
             subprocess.Popen([exe, url])
             return True
         else:
-            print("[BROWSER] Warning: Could not locate Brave executable binary on PATH.")
+            logger.warning("[BROWSER] Could not locate Brave executable binary on PATH.")
             return False
 
     @staticmethod
@@ -128,5 +129,7 @@ class BraveManager:
         if info["status"] == "ATTACHED & RUNNING":
             return True
 
-        print("[BROWSER] Brave Browser is not currently running. Launching Brave automatically...")
+        logger.info(
+            "[BROWSER] Brave Browser is not currently running. Launching Brave automatically..."
+        )
         return BraveManager.launch_brave()

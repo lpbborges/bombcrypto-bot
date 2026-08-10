@@ -17,6 +17,7 @@ import time
 import pyautogui
 
 import config
+from modules.logger import logger
 
 try:
     from evdev import UInput
@@ -25,7 +26,7 @@ try:
     UINPUT_MOUSE = UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT]}, name="bombcrypto-uinput-mouse")
 except Exception as uinput_err:
     UINPUT_MOUSE = None
-    print(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
+    logger.debug(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
 
 HAS_HYPRCTL = shutil.which("hyprctl") is not None
 
@@ -188,9 +189,15 @@ class ActionEngine:
         target_x = cur_x + dx
         target_y = cur_y + dy
 
-        print(
+        logger.info(
             f"[ACTION] Executing anti-AFK idle jitter: ({cur_x}, {cur_y}) -> ({target_x}, {target_y})"
         )
+        if getattr(config, "DRY_RUN", False):
+            logger.info(
+                f"[DRY-RUN] [ACTION] Would perform anti-AFK idle jitter to ({target_x}, {target_y})"
+            )
+            return target_x, target_y
+
         ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.15)
         return target_x, target_y
 
@@ -202,6 +209,10 @@ class ActionEngine:
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
+
+        if getattr(config, "DRY_RUN", False):
+            logger.info(f"[DRY-RUN] [ACTION] Would click at physical ({target_x}, {target_y})")
+            return
 
         use_bezier = getattr(config, "USE_BEZIER_CURVES", True)
         if use_bezier:
@@ -238,18 +249,18 @@ class ActionEngine:
                 time.sleep(0.10)
                 UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
-                print(
+                logger.info(
                     f"[ACTION] Performed native kernel uinput click at physical ({target_x}, {target_y})"
                 )
                 return
             except Exception as err:
-                print(f"[ACTION] Warning: uinput click failed ({err}). Falling back to pyautogui.")
+                logger.warning(f"[ACTION] uinput click failed ({err}). Falling back to pyautogui.")
 
         # Fallback to PyAutoGUI click
         pyautogui.mouseDown(button="left")
         time.sleep(0.10)
         pyautogui.mouseUp(button="left")
-        print(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
+        logger.info(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
 
     @staticmethod
     def click_match(match_result):
@@ -265,7 +276,11 @@ class ActionEngine:
         """
         Navigates browser directly to specified URL via Ctrl+L address bar input.
         """
-        print(f"[ACTION] Navigating directly to URL: {url}")
+        logger.info(f"[ACTION] Navigating directly to URL: {url}")
+        if getattr(config, "DRY_RUN", False):
+            logger.info(f"[DRY-RUN] [ACTION] Would navigate to URL: {url}")
+            return
+
         pyautogui.hotkey("ctrl", "l")
         time.sleep(0.5)
         pyautogui.write(url, interval=0.01)
@@ -278,6 +293,10 @@ class ActionEngine:
         if config.DIRECT_LANDING_MODE:
             ActionEngine.navigate_to_url(config.DIRECT_TREASURE_URL)
         else:
-            print("[ACTION] Refreshing browser page (F5)...")
+            logger.info("[ACTION] Refreshing browser page (F5)...")
+            if getattr(config, "DRY_RUN", False):
+                logger.info("[DRY-RUN] [ACTION] Would press F5 to refresh page")
+                return
+
             pyautogui.press("f5")
             ActionEngine.human_delay(5.0, 10.0)

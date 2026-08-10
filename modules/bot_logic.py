@@ -3,6 +3,8 @@ from enum import Enum, auto
 
 import config
 from modules.actions import ActionEngine
+from modules.logger import logger
+from modules.notifications import NotificationManager
 from modules.vision import VisionEngine
 
 
@@ -40,7 +42,7 @@ class BombCryptoBot:
     def set_state(self, new_state: BotState):
         """Transitions bot state with logging."""
         if self.state != new_state:
-            print(f"[BOT FSM] Transitioning state: {self.state.name} -> {new_state.name}")
+            logger.info(f"[BOT FSM] Transitioning state: {self.state.name} -> {new_state.name}")
             self.state = new_state
 
     def check_idle_jitter(self):
@@ -70,10 +72,12 @@ class BombCryptoBot:
 
         if stuck_duration >= max_stuck_seconds:
             stuck_mins = stuck_duration / 60.0
-            print(
-                f"\n[BOT STUCK ALERT] No progress detected for {stuck_mins:.1f} minutes "
+            msg = (
+                f"No progress detected for {stuck_mins:.1f} minutes "
                 f"(exceeds threshold of {config.MAX_STUCK_TIMEOUT_MINUTES} min). Triggering anti-stuck recovery..."
             )
+            logger.warning(f"[BOT STUCK ALERT] {msg}")
+            NotificationManager.notify_stuck_recovery(msg)
             self.set_state(BotState.STUCK_RECOVERY)
             return True
 
@@ -81,7 +85,7 @@ class BombCryptoBot:
 
     def handle_stuck_recovery(self):
         """Executes browser page refresh to recover from frozen/stuck state."""
-        print("[BOT RECOVERY] Refreshing browser page to recover from stuck state...")
+        logger.info("[BOT RECOVERY] Refreshing browser page to recover from stuck state...")
         ActionEngine.refresh_page()
         self.vision.clear_cache()
         self.update_progress()
@@ -92,15 +96,16 @@ class BombCryptoBot:
         Scans for common game error modals or disconnect OK buttons.
         Returns True if an error was handled or page refreshed.
         """
-        print("[BOT] Scanning for error popups or disconnects...")
+        logger.info("[BOT] Scanning for error popups or disconnects...")
         screen = self.vision.capture_screen()
 
         # Check for 'OK' error button
         ok_match = self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
         if ok_match:
-            print(
+            logger.info(
                 f"[BOT] Error popup detected (Confidence: {ok_match['confidence']:.2f}). Clicking OK..."
             )
+            NotificationManager.notify_error_cleared("Error OK Button")
             ActionEngine.click_match(ok_match)
             self.vision.clear_cache()
             self.update_progress()
@@ -111,9 +116,10 @@ class BombCryptoBot:
             config.TARGET_IMAGES["unknown_error"], screen_gray=screen
         )
         if unk_match:
-            print(
+            logger.info(
                 f"[BOT] Unknown error detected (Confidence: {unk_match['confidence']:.2f}). Refreshing page..."
             )
+            NotificationManager.notify_error_cleared("Unknown Error Modal")
             ActionEngine.refresh_page()
             self.vision.clear_cache()
             self.update_progress()
@@ -132,7 +138,7 @@ class BombCryptoBot:
             config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen
         )
         if profile_ok:
-            print(
+            logger.info(
                 f"[BOT] Confirm profile button ('OK') found (Confidence: {profile_ok['confidence']:.2f}). Clicking OK..."
             )
             ActionEngine.click_match(profile_ok)
@@ -146,7 +152,7 @@ class BombCryptoBot:
             config.TARGET_IMAGES["connect_wallet"], screen_gray=screen
         )
         if connect_match:
-            print(
+            logger.info(
                 f"[BOT] 'Connect Wallet' button found (Confidence: {connect_match['confidence']:.2f}). Initiating login..."
             )
             ActionEngine.click_match(connect_match)
@@ -160,7 +166,7 @@ class BombCryptoBot:
                 config.TARGET_IMAGES["select_metamask"], screen_gray=screen_after
             )
             if wallet_select:
-                print(
+                logger.info(
                     f"[BOT] Select MetaMask icon found (Confidence: {wallet_select['confidence']:.2f}). Clicking..."
                 )
                 ActionEngine.click_match(wallet_select)
@@ -172,7 +178,7 @@ class BombCryptoBot:
                 config.TARGET_IMAGES["metamask_sign"], screen_gray=screen_after
             )
             if metamask_sign:
-                print(
+                logger.info(
                     f"[BOT] MetaMask Sign button found (Confidence: {metamask_sign['confidence']:.2f}). Signing transaction..."
                 )
                 ActionEngine.click_match(metamask_sign)
@@ -191,7 +197,7 @@ class BombCryptoBot:
         3. Click 'Work All' inside the heroes modal.
         4. Click close modal button ('X').
         """
-        print("[BOT] Attempting to send heroes to work...")
+        logger.info("[BOT] Attempting to send heroes to work...")
         screen = self.vision.capture_screen()
 
         # Step 1: Find & click bottom arrow to open menu
@@ -199,7 +205,7 @@ class BombCryptoBot:
             config.TARGET_IMAGES["bottom_arrow"], screen_gray=screen
         )
         if bottom_arrow_match:
-            print(
+            logger.info(
                 f"[BOT] Found bottom arrow menu button (Confidence: {bottom_arrow_match['confidence']:.2f}). Opening menu..."
             )
             ActionEngine.click_match(bottom_arrow_match)
@@ -207,7 +213,7 @@ class BombCryptoBot:
             ActionEngine.human_delay(2.0, 4.0)
             screen = self.vision.capture_screen(force_refresh=True)
         else:
-            print(
+            logger.info(
                 "[BOT] Bottom arrow menu button not found directly; checking if menu is already open..."
             )
 
@@ -216,7 +222,7 @@ class BombCryptoBot:
             config.TARGET_IMAGES["heroes_button"], screen_gray=screen
         )
         if heroes_match:
-            print(
+            logger.info(
                 f"[BOT] Found Heroes button inside menu (Confidence: {heroes_match['confidence']:.2f}). Opening heroes list..."
             )
             ActionEngine.click_match(heroes_match)
@@ -229,14 +235,14 @@ class BombCryptoBot:
                 config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
             )
             if work_all_match:
-                print(
+                logger.info(
                     f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
                 )
                 ActionEngine.click_match(work_all_match)
                 self.vision.clear_cache()
                 ActionEngine.human_delay(2.0, 3.5)
             else:
-                print("[BOT] Warning: 'Work All' button image not found.")
+                logger.warning("[BOT] 'Work All' button image not found.")
 
             # Step 4: Close Heroes Modal
             close_screen = self.vision.capture_screen(force_refresh=True)
@@ -244,7 +250,9 @@ class BombCryptoBot:
                 config.TARGET_IMAGES["close_button"], screen_gray=close_screen
             )
             if close_match:
-                print(f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})...")
+                logger.info(
+                    f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})..."
+                )
                 ActionEngine.click_match(close_match)
                 self.vision.clear_cache()
                 ActionEngine.human_delay(1.5, 2.5)
@@ -252,16 +260,19 @@ class BombCryptoBot:
             # Step 5: Click screen center to collapse HUD menu
             center_x = screen.shape[1] // 2
             center_y = screen.shape[0] // 2
-            print(f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu...")
+            logger.info(
+                f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu..."
+            )
             ActionEngine.click_at(center_x, center_y)
             self.vision.clear_cache()
             ActionEngine.human_delay(1.5, 2.5)
 
             self.last_hero_work_time = time.time()
             self.update_progress()
+            NotificationManager.notify_hero_cycle("Heroes sent to work successfully.")
             return True
 
-        print("[BOT] Heroes button not visible on screen.")
+        logger.info("[BOT] Heroes button not visible on screen.")
         return False
 
     def enter_treasure_hunt(self) -> bool:
@@ -271,7 +282,9 @@ class BombCryptoBot:
         Otherwise, attempts to locate and click the Treasure Hunt icon.
         """
         if config.DIRECT_LANDING_MODE:
-            print("[BOT] Direct Treasure Hunt landing mode enabled. Skipping main menu icon click.")
+            logger.info(
+                "[BOT] Direct Treasure Hunt landing mode enabled. Skipping main menu icon click."
+            )
             self.update_progress()
             return True
 
@@ -280,7 +293,7 @@ class BombCryptoBot:
             config.TARGET_IMAGES["treasure_hunt_icon"], screen_gray=screen
         )
         if th_match:
-            print(
+            logger.info(
                 f"[BOT] Found Treasure Hunt map icon (Confidence: {th_match['confidence']:.2f}). Entering map..."
             )
             ActionEngine.click_match(th_match)
@@ -296,7 +309,7 @@ class BombCryptoBot:
         Scans for 'Map Cleared' banner or completion button.
         Clicks button or banner to transition to next map.
         """
-        print("[BOT] Scanning for Map Cleared indicators...")
+        logger.info("[BOT] Scanning for Map Cleared indicators...")
         screen = self.vision.capture_screen()
 
         # Step 1: Check for map_complete_button first
@@ -304,9 +317,10 @@ class BombCryptoBot:
             config.TARGET_IMAGES["map_complete_button"], screen_gray=screen
         )
         if button_match:
-            print(
+            logger.info(
                 f"[BOT] 'Map Cleared' button detected (Confidence: {button_match['confidence']:.2f}). Transitioning map..."
             )
+            NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
             ActionEngine.click_match(button_match)
             self.vision.clear_cache()
@@ -320,9 +334,10 @@ class BombCryptoBot:
             config.TARGET_IMAGES["map_complete"], screen_gray=screen
         )
         if map_match:
-            print(
+            logger.info(
                 f"[BOT] 'Map Cleared' modal detected (Confidence: {map_match['confidence']:.2f}). Transitioning map..."
             )
+            NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
             ActionEngine.click_match(map_match)
             self.vision.clear_cache()
@@ -337,7 +352,7 @@ class BombCryptoBot:
         """
         FSM-driven main decision cycle for the bot.
         """
-        print(f"\n--- [BOT CYCLE START - State: {self.state.name}] ---")
+        logger.info(f"--- [BOT CYCLE START - State: {self.state.name}] ---")
 
         # Invalidate frame cache at start of cycle
         self.vision.clear_cache()
@@ -345,35 +360,35 @@ class BombCryptoBot:
         # Step 1: Check anti-stuck timeout recovery
         if self.check_stuck_timeout():
             self.handle_stuck_recovery()
-            print("--- [BOT CYCLE END] ---\n")
+            logger.info("--- [BOT CYCLE END] ---")
             return
 
         # Step 2: Handle STUCK_RECOVERY state directly if set
         if self.state == BotState.STUCK_RECOVERY:
             self.handle_stuck_recovery()
-            print("--- [BOT CYCLE END] ---\n")
+            logger.info("--- [BOT CYCLE END] ---")
             return
 
         # Step 3: Global Error & Disconnect scan
         if self.check_errors_or_disconnect():
             self.set_state(BotState.CHECKING_ERRORS)
-            print("--- [BOT CYCLE END] ---\n")
+            logger.info("--- [BOT CYCLE END] ---")
             return
 
         # Step 4: Check Login requirement
         if self.handle_login():
             self.set_state(BotState.LOGGING_IN)
-            print("--- [BOT CYCLE END] ---\n")
+            logger.info("--- [BOT CYCLE END] ---")
             return
 
         # Step 5: Check Map Cleared requirement
         if self.check_map_cleared():
-            print("--- [BOT CYCLE END] ---\n")
+            logger.info("--- [BOT CYCLE END] ---")
             return
 
         # Step 6: FSM Work & Resting Cycle Logic
         if self.last_hero_work_time == 0:
-            print("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
+            logger.info("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
             self.set_state(BotState.SENDING_HEROES)
             if self.send_heroes_to_work():
                 self.set_state(BotState.ENTERING_MAP)
@@ -385,7 +400,7 @@ class BombCryptoBot:
 
             if elapsed_seconds >= interval_seconds:
                 elapsed_str = format_duration(elapsed_seconds)
-                print(
+                logger.info(
                     f"[BOT] Work interval reached ({elapsed_str} elapsed). Transitioning to SENDING_HEROES..."
                 )
                 self.set_state(BotState.SENDING_HEROES)
@@ -397,7 +412,7 @@ class BombCryptoBot:
                 remaining_seconds = interval_seconds - elapsed_seconds
                 elapsed_str = format_duration(elapsed_seconds)
                 remaining_str = format_duration(remaining_seconds)
-                print(
+                logger.info(
                     f"[BOT] State: {self.state.name} | Heroes working/resting ({elapsed_str} elapsed). "
                     f"Next work cycle in {remaining_str}."
                 )
@@ -409,4 +424,4 @@ class BombCryptoBot:
                 # Execute anti-AFK idle jitter if resting
                 self.check_idle_jitter()
 
-        print("--- [BOT CYCLE END] ---\n")
+        logger.info("--- [BOT CYCLE END] ---")

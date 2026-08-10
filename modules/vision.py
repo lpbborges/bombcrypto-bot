@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 
 import config
+from modules.logger import logger
 
 
 class VisionEngine:
@@ -18,7 +19,9 @@ class VisionEngine:
         self.use_wayland_grim = self._check_wayland_grim()
         self._cached_screen = None
         if self.use_wayland_grim:
-            print("[VISION] Wayland environment detected. Using 'grim' for native screen capture.")
+            logger.info(
+                "[VISION] Wayland environment detected. Using 'grim' for native screen capture."
+            )
 
     def _check_wayland_grim(self):
         is_wayland = (
@@ -56,7 +59,7 @@ class VisionEngine:
                 else:
                     gray_img = img_np
             except Exception as e:
-                print(f"[VISION] Warning: grim screen capture failed: {e}. Falling back to mss.")
+                logger.warning(f"[VISION] grim screen capture failed: {e}. Falling back to mss.")
 
         if gray_img is None:
             monitor = self.sct.monitors[self.monitor_index]
@@ -108,7 +111,7 @@ class VisionEngine:
 
         match_path = os.path.join(config.DEBUG_DIR, "debug_last_match.png")
         cv2.imwrite(match_path, debug_img)
-        print(f"[VISION DEBUG] Saved match visualization to: {match_path}")
+        logger.debug(f"[VISION DEBUG] Saved match visualization to: {match_path}")
 
     def _crop_roi(self, screen_gray, roi):
         """
