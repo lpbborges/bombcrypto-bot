@@ -127,6 +127,13 @@ class BombCryptoBot:
                 ActionEngine.click_match(close_match)
                 ActionEngine.human_delay(1.5, 2.5)
 
+            # Step 5: Click screen center to collapse HUD menu
+            center_x = screen.shape[1] // 2
+            center_y = screen.shape[0] // 2
+            print(f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu...")
+            ActionEngine.click_at(center_x, center_y)
+            ActionEngine.human_delay(1.5, 2.5)
+
             self.last_hero_work_time = time.time()
             return True
         
