@@ -85,5 +85,14 @@ MOUSE_CLICK_OFFSET = 5  # Pixels offset range from button center
 
 ---
 
+## ☕ Buy Me a Coffee
+
+If this bot saved you time or helped optimize your farming cycles, consider supporting the project!
+
+- **MetaMask / EVM (ETH, BSC, Polygon):** `0x87cAe5c5f4e8f3D5e9842b18c78e32a09b5C17Eb`
+- **Bitcoin (BTC):** `bc1q8y736rfsyz5jp76gvdz9veddcktp00rjqaw69r`
+
+---
+
 ## ⚠️ Disclaimer
 This code is provided for educational and automation research purposes. Please ensure compliance with game terms of service.
