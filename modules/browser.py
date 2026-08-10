@@ -9,6 +9,8 @@ KNOWN_BRAVE_PATHS = [
     "/usr/bin/brave-browser",
     "/usr/bin/brave",
     "/usr/bin/brave-beta",
+    "/snap/bin/brave",
+    "/snap/bin/brave-browser",
 ]
 
 class BraveManager:
