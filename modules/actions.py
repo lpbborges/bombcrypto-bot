@@ -8,6 +8,7 @@ if "mouseinfo" not in sys.modules:
     sys.modules["mouseinfo"] = dummy_mouseinfo
 
 import json
+import math
 import random
 import shutil
 import subprocess
@@ -48,41 +49,186 @@ def get_hyprland_scale():
 pyautogui.FAILSAFE = True
 
 
+def generate_bezier_curve(start, end, num_points=15):
+    """
+    Generates a list of (x, y) tuples forming a cubic Bézier curve with human-like ease-in-out easing.
+    """
+    start_x, start_y = start
+    end_x, end_y = end
+
+    distance = math.hypot(end_x - start_x, end_y - start_y)
+    if distance < 3 or num_points <= 2:
+        return [start, end]
+
+    # Vector from start to end
+    vx = end_x - start_x
+    vy = end_y - start_y
+
+    # Perpendicular normal vector
+    norm = math.hypot(vx, vy)
+    if norm > 0:
+        nx = -vy / norm
+        ny = vx / norm
+    else:
+        nx, ny = 0, 0
+
+    # Control points P1 and P2 offset randomly perpendicular to straight line path
+    offset_scale = random.uniform(-0.25, 0.25) * distance
+    p1 = (
+        start_x + 0.3 * vx + offset_scale * nx,
+        start_y + 0.3 * vy + offset_scale * ny,
+    )
+    p2 = (
+        start_x + 0.7 * vx + offset_scale * nx,
+        start_y + 0.7 * vy + offset_scale * ny,
+    )
+
+    points = []
+    for i in range(num_points):
+        u = i / float(num_points - 1)
+        # Cosine ease-in-out for realistic acceleration & deceleration
+        t = 0.5 * (1.0 - math.cos(math.pi * u))
+
+        # Cubic Bézier formula
+        one_minus_t = 1.0 - t
+        t_sq = t * t
+        t_cube = t_sq * t
+        one_minus_t_sq = one_minus_t * one_minus_t
+        one_minus_t_cube = one_minus_t_sq * one_minus_t
+
+        x = (
+            one_minus_t_cube * start_x
+            + 3 * one_minus_t_sq * t * p1[0]
+            + 3 * one_minus_t * t_sq * p2[0]
+            + t_cube * end_x
+        )
+        y = (
+            one_minus_t_cube * start_y
+            + 3 * one_minus_t_sq * t * p1[1]
+            + 3 * one_minus_t * t_sq * p2[1]
+            + t_cube * end_y
+        )
+        points.append((int(round(x)), int(round(y))))
+
+    return points
+
+
 class ActionEngine:
     @staticmethod
-    def human_delay(min_sec=config.MIN_ACTION_DELAY, max_sec=config.MAX_ACTION_DELAY):
-        """Waits a randomized human-like delay."""
-        delay = random.uniform(min_sec, max_sec)
+    def move_mouse_bezier(start_x, start_y, end_x, end_y, duration=0.2, steps=None):
+        """
+        Moves mouse along a cubic Bézier curve from (start_x, start_y) to (end_x, end_y).
+        """
+        distance = math.hypot(end_x - start_x, end_y - start_y)
+        if steps is None:
+            min_steps = getattr(config, "BEZIER_MIN_STEPS", 5)
+            steps = max(min_steps, int(distance / 15))
+
+        points = generate_bezier_curve((start_x, start_y), (end_x, end_y), num_points=steps)
+        step_delay = max(0.001, duration / float(len(points)))
+
+        scale = get_hyprland_scale() if HAS_HYPRCTL else 1.0
+        for pt_x, pt_y in points:
+            if HAS_HYPRCTL:
+                try:
+                    logic_x = int(pt_x / scale)
+                    logic_y = int(pt_y / scale)
+                    subprocess.run(
+                        ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    pass
+            try:
+                pyautogui.moveTo(pt_x, pt_y)
+            except Exception:
+                pass
+            time.sleep(step_delay)
+
+    @staticmethod
+    def human_delay(
+        min_sec=config.MIN_ACTION_DELAY,
+        max_sec=config.MAX_ACTION_DELAY,
+        use_gaussian=None,
+    ):
+        """
+        Waits a randomized human-like delay.
+        Supports Gaussian (normal) distribution centered between min_sec and max_sec.
+        """
+        if use_gaussian is None:
+            use_gaussian = getattr(config, "USE_GAUSSIAN_DELAYS", True)
+
+        if use_gaussian:
+            mu = (min_sec + max_sec) / 2.0
+            sigma = (max_sec - min_sec) / 6.0
+            delay = random.gauss(mu, sigma)
+            delay = max(min_sec, min(max_sec, delay))
+        else:
+            delay = random.uniform(min_sec, max_sec)
+
         time.sleep(delay)
+        return delay
+
+    @staticmethod
+    def idle_jitter(max_offset=None):
+        """
+        Performs periodic anti-AFK idle mouse movement by subtle jittering from current position.
+        """
+        if max_offset is None:
+            max_offset = getattr(config, "IDLE_JITTER_MAX_OFFSET", 15)
+
+        try:
+            cur_x, cur_y = pyautogui.position()
+        except Exception:
+            cur_x, cur_y = 500, 500
+
+        dx = random.choice([-1, 1]) * random.randint(3, max_offset)
+        dy = random.choice([-1, 1]) * random.randint(3, max_offset)
+        target_x = cur_x + dx
+        target_y = cur_y + dy
+
+        print(
+            f"[ACTION] Executing anti-AFK idle jitter: ({cur_x}, {cur_y}) -> ({target_x}, {target_y})"
+        )
+        ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.15)
+        return target_x, target_y
 
     @staticmethod
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
-        Uses uinput kernel device for 100% native hardware clicking under Wayland/Hyprland.
+        Uses non-linear Bézier trajectory and uinput kernel device for native clicking.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
-        # 1. Position hardware cursor via Hyprland hyprctl
-        if HAS_HYPRCTL:
+        use_bezier = getattr(config, "USE_BEZIER_CURVES", True)
+        if use_bezier:
             try:
-                scale = get_hyprland_scale()
-                logic_x = int(target_x / scale)
-                logic_y = int(target_y / scale)
-                subprocess.run(
-                    ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                time.sleep(0.15)
+                cur_x, cur_y = pyautogui.position()
+            except Exception:
+                cur_x, cur_y = target_x, target_y
+            ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y)
+        else:
+            if HAS_HYPRCTL:
+                try:
+                    scale = get_hyprland_scale()
+                    logic_x = int(target_x / scale)
+                    logic_y = int(target_y / scale)
+                    subprocess.run(
+                        ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    time.sleep(0.15)
+                except Exception:
+                    pass
+
+            try:
+                pyautogui.moveTo(target_x, target_y)
             except Exception:
                 pass
-
-        try:
-            pyautogui.moveTo(target_x, target_y)
-        except Exception:
-            pass
 
         # 2. Perform native kernel uinput click if available
         if UINPUT_MOUSE:

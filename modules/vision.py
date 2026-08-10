@@ -123,7 +123,10 @@ class VisionEngine:
 
         h_scr, w_scr = screen_gray.shape[:2]
         if len(roi) == 4:
-            if all(isinstance(v, float) or (isinstance(v, (int, float)) and 0.0 <= v <= 1.0) for v in roi):
+            if all(
+                isinstance(v, float) or (isinstance(v, (int, float)) and 0.0 <= v <= 1.0)
+                for v in roi
+            ):
                 # Normalized coordinates (ymin, xmin, ymax, xmax)
                 ymin = int(roi[0] * h_scr)
                 xmin = int(roi[1] * w_scr)
@@ -146,9 +149,7 @@ class VisionEngine:
 
         return screen_gray, 0, 0
 
-    def find_template(
-        self, template_path, threshold=None, screen_gray=None, roi=None
-    ):
+    def find_template(self, template_path, threshold=None, screen_gray=None, roi=None):
         """
         Locates template image on screen using multi-scale OpenCV template matching.
         Supports Region of Interest (ROI) bounding and target-specific thresholds.
@@ -212,9 +213,7 @@ class VisionEngine:
 
         return None
 
-    def find_all_templates(
-        self, template_path, threshold=None, screen_gray=None, roi=None
-    ):
+    def find_all_templates(self, template_path, threshold=None, screen_gray=None, roi=None):
         """
         Finds all occurrences of template image on screen above the threshold (with ROI support).
         """
@@ -256,4 +255,3 @@ class VisionEngine:
                 }
             )
         return matches
-

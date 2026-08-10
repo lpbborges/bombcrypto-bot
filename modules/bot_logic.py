@@ -17,7 +17,6 @@ class BotState(Enum):
     STUCK_RECOVERY = auto()
 
 
-
 def format_duration(seconds):
     """Formats duration into mm:ss:zzz (e.g. 05:23:450) or hh:mm:ss:zzz."""
     if seconds <= 0:
@@ -36,12 +35,23 @@ class BombCryptoBot:
         self.state = BotState.INITIALIZING
         self.last_hero_work_time = 0
         self.last_progress_time = time.time()
+        self.last_idle_jitter_time = 0
 
     def set_state(self, new_state: BotState):
         """Transitions bot state with logging."""
         if self.state != new_state:
             print(f"[BOT FSM] Transitioning state: {self.state.name} -> {new_state.name}")
             self.state = new_state
+
+    def check_idle_jitter(self):
+        """
+        Executes anti-AFK idle jitter if bot is in RESTING state and interval has elapsed.
+        """
+        if getattr(config, "ENABLE_IDLE_JITTER", True) and self.state == BotState.RESTING:
+            jitter_interval = getattr(config, "IDLE_JITTER_INTERVAL_SECONDS", 30)
+            if time.time() - self.last_idle_jitter_time >= jitter_interval:
+                ActionEngine.idle_jitter()
+                self.last_idle_jitter_time = time.time()
 
     def update_progress(self):
         """Resets the anti-stuck timeout timer upon successful action/progression."""
@@ -396,5 +406,7 @@ class BombCryptoBot:
                 if self.state != BotState.RESTING and self.enter_treasure_hunt():
                     self.set_state(BotState.RESTING)
 
-        print("--- [BOT CYCLE END] ---\n")
+                # Execute anti-AFK idle jitter if resting
+                self.check_idle_jitter()
 
+        print("--- [BOT CYCLE END] ---\n")

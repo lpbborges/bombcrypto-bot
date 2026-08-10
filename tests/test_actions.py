@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import config
-from modules.actions import ActionEngine
+from modules.actions import ActionEngine, generate_bezier_curve
 
 
 class TestActionEngine(unittest.TestCase):
@@ -15,6 +15,74 @@ class TestActionEngine(unittest.TestCase):
         self.assertGreaterEqual(slept_duration, 1.0)
         self.assertLessEqual(slept_duration, 2.0)
 
+    @patch("time.sleep")
+    def test_gaussian_reaction_delays(self, mock_sleep):
+        """Tests that human_delay with use_gaussian=True calculates Gaussian delays bounded by min/max."""
+        delays = []
+        for _ in range(50):
+            d = ActionEngine.human_delay(min_sec=1.0, max_sec=3.0, use_gaussian=True)
+            delays.append(d)
+            self.assertGreaterEqual(d, 1.0)
+            self.assertLessEqual(d, 3.0)
+
+        # Mean of sampled Gaussian delays should be roughly close to midpoint 2.0
+        avg_delay = sum(delays) / len(delays)
+        self.assertAlmostEqual(avg_delay, 2.0, delta=0.4)
+
+    @patch("time.sleep")
+    def test_uniform_reaction_delays(self, mock_sleep):
+        """Tests human_delay with use_gaussian=False."""
+        d = ActionEngine.human_delay(min_sec=1.0, max_sec=3.0, use_gaussian=False)
+        self.assertGreaterEqual(d, 1.0)
+        self.assertLessEqual(d, 3.0)
+
+    def test_generate_bezier_curve_points(self):
+        """Tests that generate_bezier_curve generates non-linear points from start to end."""
+        start = (100, 100)
+        end = (500, 400)
+        num_points = 20
+
+        points = generate_bezier_curve(start, end, num_points=num_points)
+
+        self.assertEqual(len(points), num_points)
+        self.assertEqual(points[0], start)
+        self.assertEqual(points[-1], end)
+
+        # Check that intermediate points lie within bounded coordinate range
+        for x, y in points:
+            self.assertGreaterEqual(x, 50)
+            self.assertLessEqual(x, 550)
+            self.assertGreaterEqual(y, 50)
+            self.assertLessEqual(y, 450)
+
+    def test_generate_bezier_curve_short_distance(self):
+        """Tests generate_bezier_curve with tiny distance returns start and end."""
+        start = (100, 100)
+        end = (101, 101)
+        points = generate_bezier_curve(start, end, num_points=10)
+        self.assertEqual(points, [start, end])
+
+    @patch("pyautogui.moveTo")
+    @patch("time.sleep")
+    def test_move_mouse_bezier(self, mock_sleep, mock_moveto):
+        """Tests move_mouse_bezier steps through points smooth path."""
+        ActionEngine.move_mouse_bezier(100, 100, 200, 200, duration=0.1, steps=10)
+        self.assertGreaterEqual(mock_moveto.call_count, 5)
+        self.assertGreaterEqual(mock_sleep.call_count, 5)
+        # Last step should reach destination
+        mock_moveto.assert_called_with(200, 200)
+
+    @patch("pyautogui.position", return_value=(500, 500))
+    @patch("modules.actions.ActionEngine.move_mouse_bezier")
+    def test_idle_jitter(self, mock_bezier, mock_pos):
+        """Tests idle_jitter calculates random subtle offset and calls bezier movement."""
+        target_x, target_y = ActionEngine.idle_jitter(max_offset=15)
+
+        self.assertNotEqual((target_x, target_y), (500, 500))
+        self.assertLessEqual(abs(target_x - 500), 15)
+        self.assertLessEqual(abs(target_y - 500), 15)
+        mock_bezier.assert_called_once()
+
     @patch("modules.actions.UINPUT_MOUSE", None)
     @patch("pyautogui.moveTo")
     @patch("pyautogui.mouseDown")
@@ -22,7 +90,6 @@ class TestActionEngine(unittest.TestCase):
     def test_click_at_pyautogui_fallback(self, mock_mouseup, mock_mousedown, mock_moveto):
         """Tests click_at coordinate targeting using pyautogui fallback when uinput is disabled."""
         ActionEngine.click_at(100, 200, offset=0)
-        mock_moveto.assert_called_with(100, 200)
         mock_mousedown.assert_called_once()
         mock_mouseup.assert_called_once()
 

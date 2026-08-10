@@ -31,6 +31,15 @@ MAX_CLICK_DURATION = 0.5  # Maximum mouse move time (seconds)
 MIN_ACTION_DELAY = 1.0  # Min delay between UI clicks (seconds)
 MAX_ACTION_DELAY = 2.5  # Max delay between UI clicks (seconds)
 
+# Phase 3 Anti-Detection & Humanization
+USE_BEZIER_CURVES = True  # Non-linear smooth cursor movement paths
+BEZIER_MIN_STEPS = 5  # Minimum steps for curve movement
+USE_GAUSSIAN_DELAYS = True  # Gaussian/normal distribution reaction delays
+ENABLE_IDLE_JITTER = True  # Periodic subtle mouse movement while resting
+IDLE_JITTER_INTERVAL_SECONDS = 30  # Minimum seconds between anti-AFK mouse jitters
+IDLE_JITTER_MAX_OFFSET = 15  # Max pixel variation for idle jitter
+
+
 # Bot Logic Timers (in seconds)
 HERO_WORK_INTERVAL_MINUTES = 30  # Time to sleep while heroes mine / recover stamina
 ERROR_CHECK_INTERVAL_SECONDS = 15  # Frequency to scan for game errors/disconnects
@@ -110,4 +119,3 @@ def get_target_roi(target_name_or_path: str):
     """Returns the per-template Region of Interest (ROI) tuple or None."""
     key = get_target_key(target_name_or_path)
     return TARGET_ROIS.get(key, None)
-

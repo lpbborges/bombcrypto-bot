@@ -171,7 +171,27 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         handled = self.bot.check_map_cleared()
         self.assertFalse(handled)
 
+    @patch("modules.actions.ActionEngine.idle_jitter")
+    def test_check_idle_jitter_triggered(self, mock_jitter):
+        """Tests BombCryptoBot triggers idle jitter when RESTING and interval elapsed."""
+        self.bot.set_state(BotState.RESTING)
+        self.bot.last_idle_jitter_time = time.time() - (config.IDLE_JITTER_INTERVAL_SECONDS + 5)
+
+        self.bot.check_idle_jitter()
+
+        mock_jitter.assert_called_once()
+        self.assertAlmostEqual(self.bot.last_idle_jitter_time, time.time(), delta=2.0)
+
+    @patch("modules.actions.ActionEngine.idle_jitter")
+    def test_check_idle_jitter_not_resting(self, mock_jitter):
+        """Tests BombCryptoBot does not trigger idle jitter if not in RESTING state."""
+        self.bot.set_state(BotState.SENDING_HEROES)
+        self.bot.last_idle_jitter_time = time.time() - 100
+
+        self.bot.check_idle_jitter()
+
+        mock_jitter.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
-
