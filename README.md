@@ -36,19 +36,7 @@ cd bombcrypto-bot
 pip install -r requirements.txt
 ```
 
-### 2. Capture Target Button Images
-
-Before running the bot, you must save small screenshot crops of the game buttons inside the `targets/` directory.
-
-Refer to [`targets/README.md`](targets/README.md) for the complete list:
-- `connect_wallet.png`
-- `heroes_icon.png`
-- `work_all_button.png`
-- `close_button.png`
-- `treasure_hunt_icon.png`
-- `error_ok.png`
-
-### 3. Run the Bot
+### 2. Run the Bot
 
 Open https://game.bombcrypto.io/ in your web browser and execute:
 
