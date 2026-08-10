@@ -10,9 +10,11 @@ DIRECT_LANDING_MODE = True     # When True, directly targets Treasure Hunt URL, 
 TARGET_BROWSER = "brave"       # Targeted browser ("brave")
 AUTO_LAUNCH_BRAVE = True       # Automatically launch Brave with direct game URL if not running
 
-# Vision Settings
+# Vision & Debugging Settings
 DEFAULT_MATCH_THRESHOLD = 0.30  # Responsive multi-scale match threshold
 SCREENSHOT_MONITOR_INDEX = 1   # 1 for primary monitor
+SAVE_DEBUG_IMAGES = True       # Saves debug_last_screen.png and debug_last_match.png on every capture
+LOG_FILE_PATH = os.path.join(BASE_DIR, "bot_activity.log")
 
 # Human-like Interaction Settings
 MOUSE_CLICK_OFFSET = 5          # Random offset +/- pixels from center

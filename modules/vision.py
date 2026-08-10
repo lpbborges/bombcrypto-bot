@@ -24,8 +24,9 @@ class VisionEngine:
     def capture_screen(self):
         """
         Captures the screen and returns a grayscale numpy array.
-        Supports Wayland (grim) and X11 (mss).
+        Supports Wayland (grim) and X11 (mss). Saves debug_last_screen.png.
         """
+        gray_img = None
         if self.use_wayland_grim:
             try:
                 proc = subprocess.Popen(["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -34,23 +35,56 @@ class VisionEngine:
                 img_np = np.array(img)
                 if img_np.ndim == 3:
                     if img_np.shape[2] == 4:
-                        return cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
+                        gray_img = cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
                     elif img_np.shape[2] == 3:
-                        return cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                return img_np
+                        gray_img = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray_img = img_np
             except Exception as e:
                 print(f"[VISION] Warning: grim screen capture failed: {e}. Falling back to mss.")
 
-        monitor = self.sct.monitors[self.monitor_index]
-        sct_img = self.sct.grab(monitor)
-        img_np = np.array(sct_img)
+        if gray_img is None:
+            monitor = self.sct.monitors[self.monitor_index]
+            sct_img = self.sct.grab(monitor)
+            img_np = np.array(sct_img)
+            # Check if mss returned pure black screen (Wayland X11 restriction)
+            if img_np.max() == 0 and shutil.which("grim"):
+                self.use_wayland_grim = True
+                return self.capture_screen()
+            gray_img = cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
 
-        # Check if mss returned pure black screen (Wayland X11 restriction)
-        if img_np.max() == 0 and shutil.which("grim"):
-            self.use_wayland_grim = True
-            return self.capture_screen()
+        if config.SAVE_DEBUG_IMAGES and gray_img is not None:
+            debug_path = os.path.join(config.BASE_DIR, "debug_last_screen.png")
+            cv2.imwrite(debug_path, gray_img)
 
-        return cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
+        return gray_img
+
+    def save_debug_match(self, template_name, match_result, screen_gray=None):
+        """
+        Draws a bounding box and label over the matched target and saves debug_last_match.png.
+        """
+        if not config.SAVE_DEBUG_IMAGES or not match_result:
+            return
+
+        if screen_gray is None:
+            screen_gray = self.capture_screen()
+
+        debug_img = cv2.cvtColor(screen_gray, cv2.COLOR_GRAY2BGR)
+        top_left = match_result['top_left']
+        w, h = match_result['w'], match_result['h']
+        bottom_right = (top_left[0] + w, top_left[1] + h)
+
+        # Draw green bounding box rectangle
+        cv2.rectangle(debug_img, top_left, bottom_right, (0, 255, 0), 3)
+
+        # Draw text label
+        label = f"{template_name} ({match_result['confidence']:.2f})"
+        cv2.putText(debug_img, label, (top_left[0], max(20, top_left[1] - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        match_path = os.path.join(config.BASE_DIR, "debug_last_match.png")
+        cv2.imwrite(match_path, debug_img)
+        print(f"[VISION DEBUG] Saved match visualization to: {match_path}")
 
     def find_template(self, template_path, threshold=config.DEFAULT_MATCH_THRESHOLD, screen_gray=None):
         """
@@ -98,6 +132,8 @@ class VisionEngine:
                 }
 
         if best_match and best_match['confidence'] >= threshold:
+            template_name = os.path.basename(template_path)
+            self.save_debug_match(template_name, best_match, screen_gray)
             return best_match
 
         return None

@@ -16,6 +16,22 @@ import config
 from modules.browser import BraveManager
 from modules.bot_logic import BombCryptoBot
 
+class Logger:
+    def __init__(self, filename=config.LOG_FILE_PATH):
+        self.terminal = sys.stdout
+        self.log = open(filename, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+sys.stdout = Logger()
+
 def main():
     browser_info = BraveManager.get_attached_browser_info()
     
