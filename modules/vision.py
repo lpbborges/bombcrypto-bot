@@ -54,7 +54,7 @@ class VisionEngine:
 
     def find_template(self, template_path, threshold=config.DEFAULT_MATCH_THRESHOLD, screen_gray=None):
         """
-        Locates template image on screen using OpenCV template matching.
+        Locates template image on screen using multi-scale OpenCV template matching.
         
         Returns:
             dict: { 'x': int, 'y': int, 'w': int, 'h': int, 'confidence': float } or None
@@ -69,24 +69,36 @@ class VisionEngine:
         if template is None:
             return None
 
-        h, w = template.shape[:2]
+        orig_h, orig_w = template.shape[:2]
 
-        # Execute template matching
-        res = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        best_val = -1.0
+        best_match = None
 
-        if max_val >= threshold:
-            top_left = max_loc
-            center_x = top_left[0] + w // 2
-            center_y = top_left[1] + h // 2
-            return {
-                'x': center_x,
-                'y': center_y,
-                'w': w,
-                'h': h,
-                'top_left': top_left,
-                'confidence': float(max_val)
-            }
+        # Test multi-scale matches from 0.70x to 1.30x scaling
+        scales = [1.0, 0.90, 1.10, 0.80, 1.20, 0.70, 1.30]
+        for scale in scales:
+            w, h = int(orig_w * scale), int(orig_h * scale)
+            if w < 10 or h < 10 or w > screen_gray.shape[1] or h > screen_gray.shape[0]:
+                continue
+
+            resized_temp = cv2.resize(template, (w, h), interpolation=cv2.INTER_AREA) if scale < 1.0 else cv2.resize(template, (w, h), interpolation=cv2.INTER_CUBIC)
+            res = cv2.matchTemplate(screen_gray, resized_temp, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if max_val > best_val:
+                best_val = max_val
+                best_match = {
+                    'x': max_loc[0] + w // 2,
+                    'y': max_loc[1] + h // 2,
+                    'w': w,
+                    'h': h,
+                    'top_left': max_loc,
+                    'confidence': float(max_val),
+                    'scale': scale
+                }
+
+        if best_match and best_match['confidence'] >= threshold:
+            return best_match
 
         return None
 
