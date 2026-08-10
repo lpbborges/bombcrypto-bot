@@ -49,6 +49,13 @@ class ActionEngine:
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
+        # 1. Sync PyAutoGUI internal X11 pointer position
+        try:
+            pyautogui.moveTo(target_x, target_y)
+        except Exception:
+            pass
+
+        # 2. Dispatch Wayland hardware cursor move via hyprctl (if running Hyprland)
         if HAS_HYPRCTL:
             try:
                 scale = get_hyprland_scale()
@@ -57,13 +64,12 @@ class ActionEngine:
                 subprocess.run(["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(0.15)
             except Exception:
-                duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
-                pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
-        else:
-            duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
-            pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
+                pass
 
-        pyautogui.click()
+        # 3. Perform human-like mouse press and release (100ms hold) for WebGL canvas event registration
+        pyautogui.mouseDown(button='left')
+        time.sleep(0.10)
+        pyautogui.mouseUp(button='left')
         print(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
 
     @staticmethod
