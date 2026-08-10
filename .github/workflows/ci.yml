@@ -28,7 +28,7 @@ jobs:
       - name: Install System Dependencies for OpenCV / Screen Captures
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libglib2.0-0
+          sudo apt-get install -y libgl1 libglib2.0-0 xvfb
 
       - name: Install Python Dependencies
         run: |
@@ -46,4 +46,4 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          pytest tests/ --verbose
+          xvfb-run pytest tests/ --verbose

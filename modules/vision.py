@@ -15,7 +15,13 @@ from modules.logger import logger
 class VisionEngine:
     def __init__(self, monitor_index=config.SCREENSHOT_MONITOR_INDEX):
         self.monitor_index = monitor_index
-        self.sct = mss.mss()
+        try:
+            self.sct = mss.mss()
+        except Exception as e:
+            logger.warning(
+                f"[VISION] Could not initialize mss screen capture connection ({e}). Display may be missing."
+            )
+            self.sct = None
         self.use_wayland_grim = self._check_wayland_grim()
         self._cached_screen = None
         if self.use_wayland_grim:
@@ -62,14 +68,22 @@ class VisionEngine:
                 logger.warning(f"[VISION] grim screen capture failed: {e}. Falling back to mss.")
 
         if gray_img is None:
-            monitor = self.sct.monitors[self.monitor_index]
-            sct_img = self.sct.grab(monitor)
-            img_np = np.array(sct_img)
-            # Check if mss returned pure black screen (Wayland X11 restriction)
-            if img_np.max() == 0 and shutil.which("grim"):
-                self.use_wayland_grim = True
-                return self.capture_screen(force_refresh=True)
-            gray_img = cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
+            if self.sct is None:
+                try:
+                    self.sct = mss.mss()
+                except Exception:
+                    pass
+            if self.sct is not None:
+                monitor = self.sct.monitors[self.monitor_index]
+                sct_img = self.sct.grab(monitor)
+                img_np = np.array(sct_img)
+                # Check if mss returned pure black screen (Wayland X11 restriction)
+                if img_np.max() == 0 and shutil.which("grim"):
+                    self.use_wayland_grim = True
+                    return self.capture_screen(force_refresh=True)
+                gray_img = cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
+            else:
+                gray_img = np.zeros((1080, 1920), dtype=np.uint8)
 
         self._cached_screen = gray_img
 

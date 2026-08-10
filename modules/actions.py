@@ -1,4 +1,11 @@
+import json
+import math
+import os
+import random
+import shutil
+import subprocess
 import sys
+import time
 import types
 
 # Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
@@ -7,17 +14,31 @@ if "mouseinfo" not in sys.modules:
     dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
     sys.modules["mouseinfo"] = dummy_mouseinfo
 
-import json
-import math
-import random
-import shutil
-import subprocess
-import time
+from modules.logger import logger
 
-import pyautogui
+# Ensure DISPLAY environment variable is set on Linux before importing pyautogui
+if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
+    os.environ["DISPLAY"] = ":99"
+
+try:
+    import pyautogui
+except Exception as pyauto_err:
+    logger.warning(
+        f"[ACTION] Could not initialize PyAutoGUI display connection ({pyauto_err}). Using headless dummy."
+    )
+    pyautogui = types.ModuleType("pyautogui")
+    pyautogui.FAILSAFE = True
+    pyautogui.moveTo = lambda *a, **k: None
+    pyautogui.position = lambda *a, **k: (500, 500)
+    pyautogui.mouseDown = lambda *a, **k: None
+    pyautogui.mouseUp = lambda *a, **k: None
+    pyautogui.press = lambda *a, **k: None
+    pyautogui.write = lambda *a, **k: None
+    pyautogui.hotkey = lambda *a, **k: None
+    pyautogui.click = lambda *a, **k: None
+    sys.modules["pyautogui"] = pyautogui
 
 import config
-from modules.logger import logger
 
 try:
     from evdev import UInput
