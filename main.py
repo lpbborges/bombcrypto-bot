@@ -13,18 +13,26 @@ if "mouseinfo" not in sys.modules:
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
+from modules.browser import BraveManager
 from modules.bot_logic import BombCryptoBot
 
 def main():
+    brave_status = "Running" if BraveManager.is_brave_running() else "Not Running (Auto-launch enabled)"
+    
     print("==================================================")
     print("           BOMB CRYPTO AUTOMATION BOT             ")
     print("==================================================")
     print("Press Ctrl+C in terminal or move mouse to screen corner to emergency exit.")
+    print(f"Target Browser: Brave ({brave_status})")
     print(f"Target Images Directory: {config.TARGETS_DIR}")
     print(f"Direct Landing Mode: {config.DIRECT_LANDING_MODE}")
     print(f"Direct URL: {config.DIRECT_TREASURE_URL}")
     print(f"Hero Work Interval: {config.HERO_WORK_INTERVAL_MINUTES} minutes")
     print("==================================================\n")
+
+    # Verify Brave browser status
+    if config.AUTO_LAUNCH_BRAVE:
+        BraveManager.verify_and_ensure_brave()
 
     # Verify targets directory exists
     if not os.path.exists(config.TARGETS_DIR):

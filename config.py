@@ -4,9 +4,11 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGETS_DIR = os.path.join(BASE_DIR, "targets")
 
-# Direct Game Landing URL Settings
+# Direct Game Landing URL & Browser Settings
 DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
 DIRECT_LANDING_MODE = True     # When True, directly targets Treasure Hunt URL, skipping menu icon navigation
+TARGET_BROWSER = "brave"       # Targeted browser ("brave")
+AUTO_LAUNCH_BRAVE = True       # Automatically launch Brave with direct game URL if not running
 
 # Vision Settings
 DEFAULT_MATCH_THRESHOLD = 0.75  # 75% confidence match required
