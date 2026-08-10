@@ -1,3 +1,12 @@
+import sys
+import types
+
+# Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
+if "mouseinfo" not in sys.modules:
+    dummy_mouseinfo = types.ModuleType("mouseinfo")
+    dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
+    sys.modules["mouseinfo"] = dummy_mouseinfo
+
 import random
 import time
 import pyautogui

@@ -1,6 +1,13 @@
 import time
 import sys
 import os
+import types
+
+# Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
+if "mouseinfo" not in sys.modules:
+    dummy_mouseinfo = types.ModuleType("mouseinfo")
+    dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
+    sys.modules["mouseinfo"] = dummy_mouseinfo
 
 # Add local path to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
