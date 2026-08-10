@@ -1,6 +1,6 @@
-import time
-import sys
 import os
+import sys
+import time
 import types
 
 # Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
@@ -13,8 +13,9 @@ if "mouseinfo" not in sys.modules:
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
-from modules.browser import BraveManager
 from modules.bot_logic import BombCryptoBot
+from modules.browser import BraveManager
+
 
 class Logger:
     def __init__(self, filename=config.LOG_FILE_PATH):
@@ -30,11 +31,13 @@ class Logger:
         self.terminal.flush()
         self.log.flush()
 
+
 sys.stdout = Logger()
+
 
 def main():
     browser_info = BraveManager.get_attached_browser_info()
-    
+
     print("==================================================")
     print("           BOMB CRYPTO AUTOMATION BOT             ")
     print("==================================================")
@@ -71,6 +74,7 @@ def main():
         print("\n[BOT] Bot manually stopped by user (Ctrl+C). Exiting...")
     except Exception as e:
         print(f"\n[ERROR] Unexpected exception occurred: {e}")
+
 
 if __name__ == "__main__":
     main()

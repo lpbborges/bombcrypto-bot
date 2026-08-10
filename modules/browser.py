@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+
 import config
 
 KNOWN_BRAVE_PATHS = [
@@ -13,38 +14,52 @@ KNOWN_BRAVE_PATHS = [
     "/snap/bin/brave-browser",
 ]
 
+
 class BraveManager:
     @staticmethod
     def get_attached_browser_info():
         """
         Detects active browser processes and returns details about the attached browser.
-        
+
         Returns:
             dict: { 'name': str, 'pid': str, 'exe': str, 'status': str }
         """
         browser_targets = [
-            ("Brave Browser (Beta/Release)", ["brave-origin-beta", "brave-browser", "brave"]),
+            (
+                "Brave Browser (Beta/Release)",
+                ["brave-origin-beta", "brave-browser", "brave"],
+            ),
             ("Google Chrome", ["google-chrome", "chrome", "chromium"]),
             ("Mozilla Firefox", ["firefox"]),
             ("Microsoft Edge", ["msedge", "edge"]),
         ]
-        ignore_terms = ["crashpad", "renderer", "utility", "zygote", "sandbox", "type=", "grep"]
+        ignore_terms = [
+            "crashpad",
+            "renderer",
+            "utility",
+            "zygote",
+            "sandbox",
+            "type=",
+            "grep",
+        ]
 
         try:
             output = subprocess.check_output(["ps", "-eo", "pid,comm,args"], text=True)
             for name, keywords in browser_targets:
                 for line in output.splitlines():
                     line_lower = line.lower()
-                    if any(k in line_lower for k in keywords) and not any(term in line_lower for term in ignore_terms):
+                    if any(k in line_lower for k in keywords) and not any(
+                        term in line_lower for term in ignore_terms
+                    ):
                         parts = line.strip().split(None, 2)
                         if len(parts) >= 3:
-                            pid, comm, args = parts[0], parts[1], parts[2]
+                            pid, _, args = parts[0], parts[1], parts[2]
                             exe_path = args.split()[0]
                             return {
                                 "name": name,
                                 "pid": pid,
                                 "exe": exe_path,
-                                "status": "ATTACHED & RUNNING"
+                                "status": "ATTACHED & RUNNING",
                             }
         except Exception as e:
             print(f"[BROWSER] Warning querying process table: {e}")
@@ -56,14 +71,14 @@ class BraveManager:
                 "name": "Brave Browser",
                 "pid": "N/A",
                 "exe": exe,
-                "status": "NOT RUNNING (Auto-launch enabled)"
+                "status": "NOT RUNNING (Auto-launch enabled)",
             }
 
         return {
             "name": "Unknown / Manual Browser",
             "pid": "N/A",
             "exe": "N/A",
-            "status": "WAITING FOR BROWSER"
+            "status": "WAITING FOR BROWSER",
         }
 
     @staticmethod

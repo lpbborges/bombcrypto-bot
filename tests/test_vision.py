@@ -1,0 +1,90 @@
+import os
+import shutil
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import cv2
+import numpy as np
+
+from modules.vision import VisionEngine
+
+
+class TestVisionEngine(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.vision = VisionEngine()
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_frame_caching_and_invalidation(self):
+        """Tests screen frame caching and clear_cache behavior."""
+        dummy_frame = np.ones((50, 50), dtype=np.uint8) * 128
+        self.vision._cached_screen = dummy_frame
+
+        # Cache retrieval
+        cached = self.vision.capture_screen(force_refresh=False)
+        self.assertIs(cached, dummy_frame)
+
+        # Invalidation
+        self.vision.clear_cache()
+        self.assertIsNone(self.vision._cached_screen)
+
+    def test_find_template_exact_match(self):
+        """Tests multi-scale template matching with a synthetic generated image."""
+        # Create 200x200 canvas
+        canvas = np.zeros((200, 200), dtype=np.uint8)
+
+        # Create textured template (40x40 circle pattern with variance)
+        template = np.zeros((40, 40), dtype=np.uint8)
+        cv2.circle(template, (20, 20), 15, 255, -1)
+        cv2.circle(template, (20, 20), 8, 100, -1)
+        template_path = os.path.join(self.temp_dir, "pattern.png")
+        cv2.imwrite(template_path, template)
+
+        # Place the exact template at center (top_left x=80, y=80 -> center x=100, y=100)
+        canvas[80:120, 80:120] = template
+
+        match = self.vision.find_template(template_path, threshold=0.9, screen_gray=canvas)
+        self.assertIsNotNone(match)
+        self.assertAlmostEqual(match["x"], 100, delta=2)
+        self.assertAlmostEqual(match["y"], 100, delta=2)
+        self.assertGreaterEqual(match["confidence"], 0.9)
+
+    def test_find_template_non_existent_file(self):
+        """Tests that passing a non-existent file returns None without raising an exception."""
+        result = self.vision.find_template(
+            "/non/existent/path.png", screen_gray=np.zeros((10, 10), dtype=np.uint8)
+        )
+        self.assertIsNone(result)
+
+    def test_find_all_templates(self):
+        """Tests finding multiple occurrences of a target template."""
+        canvas = np.zeros((300, 300), dtype=np.uint8)
+
+        # Create textured template (30x30 pattern)
+        template = np.zeros((30, 30), dtype=np.uint8)
+        cv2.rectangle(template, (5, 5), (25, 25), 255, -1)
+        cv2.circle(template, (15, 15), 5, 50, -1)
+        template_path = os.path.join(self.temp_dir, "multi_pattern.png")
+        cv2.imwrite(template_path, template)
+
+        # Place template at two distinct positions far apart
+        canvas[30:60, 30:60] = template
+        canvas[200:230, 200:230] = template
+
+        matches = self.vision.find_all_templates(template_path, threshold=0.9, screen_gray=canvas)
+        self.assertEqual(len(matches), 2)
+
+    def test_wayland_detection(self):
+        """Tests Wayland environment detection check."""
+        with (
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}),
+            patch("shutil.which", return_value="/usr/bin/grim"),
+        ):
+            self.assertTrue(self.vision._check_wayland_grim())
+
+
+if __name__ == "__main__":
+    unittest.main()
