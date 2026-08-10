@@ -11,7 +11,7 @@ TARGET_BROWSER = "brave"       # Targeted browser ("brave")
 AUTO_LAUNCH_BRAVE = True       # Automatically launch Brave with direct game URL if not running
 
 # Vision Settings
-DEFAULT_MATCH_THRESHOLD = 0.75  # 75% confidence match required
+DEFAULT_MATCH_THRESHOLD = 0.80  # 80% confidence match required to prevent false positives
 SCREENSHOT_MONITOR_INDEX = 1   # 1 for primary monitor
 
 # Human-like Interaction Settings

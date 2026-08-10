@@ -34,56 +34,43 @@ class BombCryptoBot:
 
     def handle_login(self):
         """
-        Flexibly handles all login/reconnect permutations:
-        - Direct refresh showing 'confirm_profile' ("OK") directly without 'connect_wallet'.
-        - Full login flow: 'confirm_profile' -> 'connect_wallet' -> MetaMask sign -> 'confirm_profile'.
+        Flexibly handles login/reconnect states without duplicate click spam.
         """
-        action_taken = False
-        max_attempts = 4  # Process up to 4 sequential login interaction steps if needed
+        screen = self.vision.capture_screen()
 
-        for attempt in range(max_attempts):
-            screen = self.vision.capture_screen()
-            step_action = False
+        # Step 1: Check for profile confirmation 'OK' button first
+        profile_ok = self.vision.find_template(config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen)
+        if profile_ok:
+            print(f"[BOT] Confirm profile button ('OK') found (Confidence: {profile_ok['confidence']:.2f}). Clicking OK...")
+            ActionEngine.click_match(profile_ok)
+            ActionEngine.human_delay(4.0, 6.0)
+            return True
 
-            # Check 1: Confirm profile ("OK" button)
-            profile_ok = self.vision.find_template(config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen)
-            if profile_ok:
-                print("[BOT] Confirm profile button ('OK') found. Clicking OK...")
-                ActionEngine.click_match(profile_ok)
-                ActionEngine.human_delay(3.0, 5.0)
-                step_action = True
+        # Step 2: Check for 'Connect Wallet' button
+        connect_match = self.vision.find_template(config.TARGET_IMAGES["connect_wallet"], screen_gray=screen)
+        if connect_match:
+            print(f"[BOT] 'Connect Wallet' button found (Confidence: {connect_match['confidence']:.2f}). Initiating login...")
+            ActionEngine.click_match(connect_match)
+            ActionEngine.human_delay(4.0, 6.0)
 
-            # Check 2: Connect Wallet button
-            connect_match = self.vision.find_template(config.TARGET_IMAGES["connect_wallet"], screen_gray=screen)
-            if connect_match:
-                print("[BOT] 'Connect Wallet' button found. Initiating login...")
-                ActionEngine.click_match(connect_match)
-                ActionEngine.human_delay(3.0, 5.0)
-                step_action = True
-
-            # Check 3: Select MetaMask wallet option
-            wallet_select = self.vision.find_template(config.TARGET_IMAGES["select_metamask"], screen_gray=screen)
+            # Check if wallet selection modal pops up immediately after
+            screen_after = self.vision.capture_screen()
+            wallet_select = self.vision.find_template(config.TARGET_IMAGES["select_metamask"], screen_gray=screen_after)
             if wallet_select:
-                print("[BOT] Select MetaMask icon found. Clicking...")
+                print(f"[BOT] Select MetaMask icon found (Confidence: {wallet_select['confidence']:.2f}). Clicking...")
                 ActionEngine.click_match(wallet_select)
                 ActionEngine.human_delay(3.0, 5.0)
-                step_action = True
 
-            # Check 4: MetaMask Sign popup button
-            metamask_sign = self.vision.find_template(config.TARGET_IMAGES["metamask_sign"], screen_gray=screen)
+            # Check for MetaMask Sign button popup
+            metamask_sign = self.vision.find_template(config.TARGET_IMAGES["metamask_sign"], screen_gray=screen_after)
             if metamask_sign:
-                print("[BOT] MetaMask Sign button found. Signing transaction...")
+                print(f"[BOT] MetaMask Sign button found (Confidence: {metamask_sign['confidence']:.2f}). Signing transaction...")
                 ActionEngine.click_match(metamask_sign)
                 ActionEngine.human_delay(5.0, 8.0)
-                step_action = True
 
-            if step_action:
-                action_taken = True
-            else:
-                # No remaining login elements found on screen
-                break
+            return True
 
-        return action_taken
+        return False
 
     def send_heroes_to_work(self):
         """
@@ -99,9 +86,9 @@ class BombCryptoBot:
         # Step 1: Find & click bottom arrow to open menu
         bottom_arrow_match = self.vision.find_template(config.TARGET_IMAGES["bottom_arrow"], screen_gray=screen)
         if bottom_arrow_match:
-            print("[BOT] Found bottom arrow menu button. Opening menu...")
+            print(f"[BOT] Found bottom arrow menu button (Confidence: {bottom_arrow_match['confidence']:.2f}). Opening menu...")
             ActionEngine.click_match(bottom_arrow_match)
-            ActionEngine.human_delay(1.5, 3.0)
+            ActionEngine.human_delay(2.0, 4.0)
             screen = self.vision.capture_screen()
         else:
             print("[BOT] Bottom arrow menu button not found directly; checking if menu is already open...")
@@ -109,23 +96,23 @@ class BombCryptoBot:
         # Step 2: Click Heroes Button inside opened menu
         heroes_match = self.vision.find_template(config.TARGET_IMAGES["heroes_button"], screen_gray=screen)
         if heroes_match:
-            print("[BOT] Found Heroes button inside menu. Opening heroes list...")
+            print(f"[BOT] Found Heroes button inside menu (Confidence: {heroes_match['confidence']:.2f}). Opening heroes list...")
             ActionEngine.click_match(heroes_match)
-            ActionEngine.human_delay(2.0, 4.0)
+            ActionEngine.human_delay(2.5, 4.5)
 
             # Step 3: Click 'Work All' button inside heroes modal
             work_all_match = self.vision.find_template(config.TARGET_IMAGES["work_all_button"])
             if work_all_match:
-                print("[BOT] Clicking 'Work All' button...")
+                print(f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})...")
                 ActionEngine.click_match(work_all_match)
-                ActionEngine.human_delay(1.5, 3.0)
+                ActionEngine.human_delay(2.0, 3.5)
             else:
                 print("[BOT] Warning: 'Work All' button image not found.")
 
             # Step 4: Close Heroes Modal
             close_match = self.vision.find_template(config.TARGET_IMAGES["close_button"])
             if close_match:
-                print("[BOT] Closing Heroes menu...")
+                print(f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})...")
                 ActionEngine.click_match(close_match)
                 ActionEngine.human_delay(1.5, 2.5)
 
