@@ -12,8 +12,10 @@ class BotState(Enum):
     LOGGING_IN = auto()
     SENDING_HEROES = auto()
     ENTERING_MAP = auto()
+    MAP_CLEARED = auto()
     RESTING = auto()
     STUCK_RECOVERY = auto()
+
 
 
 def format_duration(seconds):
@@ -279,6 +281,48 @@ class BombCryptoBot:
 
         return False
 
+    def check_map_cleared(self) -> bool:
+        """
+        Scans for 'Map Cleared' banner or completion button.
+        Clicks button or banner to transition to next map.
+        """
+        print("[BOT] Scanning for Map Cleared indicators...")
+        screen = self.vision.capture_screen()
+
+        # Step 1: Check for map_complete_button first
+        button_match = self.vision.find_template(
+            config.TARGET_IMAGES["map_complete_button"], screen_gray=screen
+        )
+        if button_match:
+            print(
+                f"[BOT] 'Map Cleared' button detected (Confidence: {button_match['confidence']:.2f}). Transitioning map..."
+            )
+            self.set_state(BotState.MAP_CLEARED)
+            ActionEngine.click_match(button_match)
+            self.vision.clear_cache()
+            ActionEngine.human_delay(3.0, 5.0)
+            self.update_progress()
+            self.set_state(BotState.RESTING)
+            return True
+
+        # Step 2: Check for map_complete modal as fallback
+        map_match = self.vision.find_template(
+            config.TARGET_IMAGES["map_complete"], screen_gray=screen
+        )
+        if map_match:
+            print(
+                f"[BOT] 'Map Cleared' modal detected (Confidence: {map_match['confidence']:.2f}). Transitioning map..."
+            )
+            self.set_state(BotState.MAP_CLEARED)
+            ActionEngine.click_match(map_match)
+            self.vision.clear_cache()
+            ActionEngine.human_delay(3.0, 5.0)
+            self.update_progress()
+            self.set_state(BotState.RESTING)
+            return True
+
+        return False
+
     def run_cycle(self):
         """
         FSM-driven main decision cycle for the bot.
@@ -312,7 +356,12 @@ class BombCryptoBot:
             print("--- [BOT CYCLE END] ---\n")
             return
 
-        # Step 5: FSM Work & Resting Cycle Logic
+        # Step 5: Check Map Cleared requirement
+        if self.check_map_cleared():
+            print("--- [BOT CYCLE END] ---\n")
+            return
+
+        # Step 6: FSM Work & Resting Cycle Logic
         if self.last_hero_work_time == 0:
             print("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
             self.set_state(BotState.SENDING_HEROES)
@@ -348,3 +397,4 @@ class BombCryptoBot:
                     self.set_state(BotState.RESTING)
 
         print("--- [BOT CYCLE END] ---\n")
+

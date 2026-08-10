@@ -85,6 +85,52 @@ class TestVisionEngine(unittest.TestCase):
         ):
             self.assertTrue(self.vision._check_wayland_grim())
 
+    def test_find_template_roi_inside(self):
+        """Tests that ROI bounding finds template and calculates correct full-screen coordinates."""
+        canvas = np.zeros((200, 200), dtype=np.uint8)
+        template = np.zeros((30, 30), dtype=np.uint8)
+        cv2.rectangle(template, (5, 5), (25, 25), 255, -1)
+        template_path = os.path.join(self.temp_dir, "roi_target.png")
+        cv2.imwrite(template_path, template)
+
+        # Place template in bottom half (y=150 to 180, x=50 to 80 -> center x=65, y=165)
+        canvas[150:180, 50:80] = template
+
+        # ROI for bottom half (ymin=0.5, xmin=0.0, ymax=1.0, xmax=1.0)
+        match = self.vision.find_template(
+            template_path, threshold=0.9, screen_gray=canvas, roi=(0.5, 0.0, 1.0, 1.0)
+        )
+        self.assertIsNotNone(match)
+        self.assertAlmostEqual(match["x"], 65, delta=2)
+        self.assertAlmostEqual(match["y"], 165, delta=2)
+
+    def test_find_template_roi_outside(self):
+        """Tests that template outside designated ROI is not matched."""
+        canvas = np.zeros((200, 200), dtype=np.uint8)
+        template = np.zeros((30, 30), dtype=np.uint8)
+        cv2.rectangle(template, (5, 5), (25, 25), 255, -1)
+        template_path = os.path.join(self.temp_dir, "roi_outside_target.png")
+        cv2.imwrite(template_path, template)
+
+        # Place template in top half (y=20 to 50, x=50 to 80)
+        canvas[20:50, 50:80] = template
+
+        # ROI restricted to bottom half (ymin=0.6, xmin=0.0, ymax=1.0, xmax=1.0)
+        match = self.vision.find_template(
+            template_path, threshold=0.9, screen_gray=canvas, roi=(0.6, 0.0, 1.0, 1.0)
+        )
+        self.assertIsNone(match)
+
+    def test_target_threshold_and_roi_config_resolution(self):
+        """Tests automatic lookup of target-specific thresholds and ROIs from config."""
+        import config
+
+        self.assertEqual(config.get_target_threshold("bottom_arrow"), 0.70)
+        self.assertEqual(config.get_target_threshold("confirm_profile_ok"), 0.75)
+        self.assertEqual(config.get_target_roi("bottom_arrow"), (0.60, 0.0, 1.0, 1.0))
+        self.assertIsNone(config.get_target_roi("non_existent_target"))
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -110,17 +110,60 @@ class VisionEngine:
         cv2.imwrite(match_path, debug_img)
         print(f"[VISION DEBUG] Saved match visualization to: {match_path}")
 
+    def _crop_roi(self, screen_gray, roi):
+        """
+        Crops screen_gray based on ROI specification.
+        ROI can be:
+        - (ymin, xmin, ymax, xmax) floats 0.0-1.0 (normalized screen coords)
+        - (x, y, w, h) integers (pixel bounds)
+        Returns: (cropped_img, offset_x, offset_y)
+        """
+        if roi is None:
+            return screen_gray, 0, 0
+
+        h_scr, w_scr = screen_gray.shape[:2]
+        if len(roi) == 4:
+            if all(isinstance(v, float) or (isinstance(v, (int, float)) and 0.0 <= v <= 1.0) for v in roi):
+                # Normalized coordinates (ymin, xmin, ymax, xmax)
+                ymin = int(roi[0] * h_scr)
+                xmin = int(roi[1] * w_scr)
+                ymax = int(roi[2] * h_scr)
+                xmax = int(roi[3] * w_scr)
+            else:
+                # Pixel coordinates (x, y, w, h)
+                xmin = int(roi[0])
+                ymin = int(roi[1])
+                xmax = xmin + int(roi[2])
+                ymax = ymin + int(roi[3])
+
+            # Clamp bounds to screen dimensions
+            xmin = max(0, min(xmin, w_scr - 1))
+            ymin = max(0, min(ymin, h_scr - 1))
+            xmax = max(xmin + 1, min(xmax, w_scr))
+            ymax = max(ymin + 1, min(ymax, h_scr))
+
+            return screen_gray[ymin:ymax, xmin:xmax], xmin, ymin
+
+        return screen_gray, 0, 0
+
     def find_template(
-        self, template_path, threshold=config.DEFAULT_MATCH_THRESHOLD, screen_gray=None
+        self, template_path, threshold=None, screen_gray=None, roi=None
     ):
         """
         Locates template image on screen using multi-scale OpenCV template matching.
+        Supports Region of Interest (ROI) bounding and target-specific thresholds.
 
         Returns:
-            dict: { 'x': int, 'y': int, 'w': int, 'h': int, 'confidence': float } or None
+            dict: { 'x': int, 'y': int, 'w': int, 'h': int, 'confidence': float, 'top_left': tuple } or None
         """
         if not os.path.exists(template_path):
             return None
+
+        if threshold is None:
+            threshold = config.get_target_threshold(template_path)
+
+        if roi is None:
+            roi = config.get_target_roi(template_path)
 
         if screen_gray is None:
             screen_gray = self.capture_screen()
@@ -130,6 +173,7 @@ class VisionEngine:
             return None
 
         orig_h, orig_w = template.shape[:2]
+        search_gray, offset_x, offset_y = self._crop_roi(screen_gray, roi)
 
         best_val = -1.0
         best_match = None
@@ -138,7 +182,7 @@ class VisionEngine:
         scales = [1.0, 0.90, 1.10, 0.80, 1.20, 0.70, 1.30]
         for scale in scales:
             w, h = int(orig_w * scale), int(orig_h * scale)
-            if w < 10 or h < 10 or w > screen_gray.shape[1] or h > screen_gray.shape[0]:
+            if w < 10 or h < 10 or w > search_gray.shape[1] or h > search_gray.shape[0]:
                 continue
 
             resized_temp = (
@@ -146,17 +190,17 @@ class VisionEngine:
                 if scale < 1.0
                 else cv2.resize(template, (w, h), interpolation=cv2.INTER_CUBIC)
             )
-            res = cv2.matchTemplate(screen_gray, resized_temp, cv2.TM_CCOEFF_NORMED)
+            res = cv2.matchTemplate(search_gray, resized_temp, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
             if max_val > best_val:
                 best_val = max_val
                 best_match = {
-                    "x": max_loc[0] + w // 2,
-                    "y": max_loc[1] + h // 2,
+                    "x": max_loc[0] + offset_x + w // 2,
+                    "y": max_loc[1] + offset_y + h // 2,
                     "w": w,
                     "h": h,
-                    "top_left": max_loc,
+                    "top_left": (max_loc[0] + offset_x, max_loc[1] + offset_y),
                     "confidence": float(max_val),
                     "scale": scale,
                 }
@@ -169,13 +213,19 @@ class VisionEngine:
         return None
 
     def find_all_templates(
-        self, template_path, threshold=config.DEFAULT_MATCH_THRESHOLD, screen_gray=None
+        self, template_path, threshold=None, screen_gray=None, roi=None
     ):
         """
-        Finds all occurrences of template image on screen above the threshold.
+        Finds all occurrences of template image on screen above the threshold (with ROI support).
         """
         if not os.path.exists(template_path):
             return []
+
+        if threshold is None:
+            threshold = config.get_target_threshold(template_path)
+
+        if roi is None:
+            roi = config.get_target_roi(template_path)
 
         if screen_gray is None:
             screen_gray = self.capture_screen()
@@ -185,18 +235,25 @@ class VisionEngine:
             return []
 
         h, w = template.shape[:2]
-        res = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
+        search_gray, offset_x, offset_y = self._crop_roi(screen_gray, roi)
+
+        if w > search_gray.shape[1] or h > search_gray.shape[0]:
+            return []
+
+        res = cv2.matchTemplate(search_gray, template, cv2.TM_CCOEFF_NORMED)
         locations = np.where(res >= threshold)
 
         matches = []
         for pt in zip(*locations[::-1]):
             matches.append(
                 {
-                    "x": pt[0] + w // 2,
-                    "y": pt[1] + h // 2,
+                    "x": pt[0] + offset_x + w // 2,
+                    "y": pt[1] + offset_y + h // 2,
                     "w": w,
                     "h": h,
+                    "top_left": (pt[0] + offset_x, pt[1] + offset_y),
                     "confidence": float(res[pt[1], pt[0]]),
                 }
             )
         return matches
+

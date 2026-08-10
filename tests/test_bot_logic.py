@@ -127,6 +127,51 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertEqual(mock_click_match.call_count, 4)
         mock_click_at.assert_called_once_with(50, 50)  # Screen center click to collapse HUD
 
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_check_map_cleared_button_detected(
+        self, mock_delay, mock_click, mock_capture, mock_find
+    ):
+        """Tests map clear button detection, state transition, and progress update."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        mock_find.side_effect = lambda key, **k: (
+            {"x": 50, "y": 50, "confidence": 0.85} if "map_complete_button" in key else None
+        )
+
+        handled = self.bot.check_map_cleared()
+        self.assertTrue(handled)
+        mock_click.assert_called_once()
+        self.assertEqual(self.bot.state, BotState.RESTING)
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_check_map_cleared_modal_fallback(
+        self, mock_delay, mock_click, mock_capture, mock_find
+    ):
+        """Tests map clear modal fallback detection when button target is missing."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        mock_find.side_effect = lambda key, **k: (
+            {"x": 50, "y": 50, "confidence": 0.80} if "map_complete.png" in key else None
+        )
+
+        handled = self.bot.check_map_cleared()
+        self.assertTrue(handled)
+        mock_click.assert_called_once()
+        self.assertEqual(self.bot.state, BotState.RESTING)
+
+    @patch("modules.vision.VisionEngine.find_template", return_value=None)
+    @patch("modules.vision.VisionEngine.capture_screen")
+    def test_check_map_cleared_none(self, mock_capture, mock_find):
+        """Tests check_map_cleared when no map complete banner/button is visible."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        handled = self.bot.check_map_cleared()
+        self.assertFalse(handled)
+
 
 if __name__ == "__main__":
     unittest.main()
+

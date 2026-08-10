@@ -50,4 +50,64 @@ TARGET_IMAGES = {
     "back_button": os.path.join(TARGETS_DIR, "back_button.png"),
     "error_ok": os.path.join(TARGETS_DIR, "error_ok.png"),
     "unknown_error": os.path.join(TARGETS_DIR, "unknown_error.png"),
+    "map_complete": os.path.join(TARGETS_DIR, "map_complete.png"),
+    "map_complete_button": os.path.join(TARGETS_DIR, "map_complete_button.png"),
 }
+
+# Per-Target Vision Thresholds (Phase 2)
+TARGET_THRESHOLDS = {
+    "connect_wallet": 0.70,
+    "select_metamask": 0.70,
+    "metamask_sign": 0.70,
+    "confirm_profile_ok": 0.75,
+    "bottom_arrow": 0.70,
+    "heroes_button": 0.70,
+    "work_all_button": 0.75,
+    "close_button": 0.70,
+    "treasure_hunt_icon": 0.70,
+    "back_button": 0.70,
+    "error_ok": 0.75,
+    "unknown_error": 0.70,
+    "map_complete": 0.70,
+    "map_complete_button": 0.70,
+}
+
+# Per-Target Regions of Interest (ROI) (Phase 2)
+# Formats supported: (ymin, xmin, ymax, xmax) normalized floats 0.0-1.0 or (x, y, w, h) pixels
+TARGET_ROIS = {
+    "bottom_arrow": (0.60, 0.0, 1.0, 1.0),
+    "heroes_button": (0.50, 0.0, 1.0, 1.0),
+    "connect_wallet": (0.20, 0.20, 0.80, 0.80),
+    "confirm_profile_ok": (0.20, 0.20, 0.80, 0.80),
+    "work_all_button": (0.15, 0.15, 0.85, 0.85),
+    "close_button": (0.0, 0.0, 1.0, 1.0),
+    "map_complete": (0.10, 0.10, 0.90, 0.90),
+    "map_complete_button": (0.30, 0.10, 0.95, 0.90),
+}
+
+
+def get_target_key(target_name_or_path: str) -> str:
+    """Helper to resolve target_name_or_path to a standard target key."""
+    if not target_name_or_path:
+        return ""
+    if target_name_or_path in TARGET_IMAGES:
+        return target_name_or_path
+    base = os.path.basename(target_name_or_path)
+    filename, _ = os.path.splitext(base)
+    for key, path in TARGET_IMAGES.items():
+        if path == target_name_or_path or key == filename:
+            return key
+    return filename
+
+
+def get_target_threshold(target_name_or_path: str) -> float:
+    """Returns the per-template matching threshold from config or DEFAULT_MATCH_THRESHOLD."""
+    key = get_target_key(target_name_or_path)
+    return TARGET_THRESHOLDS.get(key, DEFAULT_MATCH_THRESHOLD)
+
+
+def get_target_roi(target_name_or_path: str):
+    """Returns the per-template Region of Interest (ROI) tuple or None."""
+    key = get_target_key(target_name_or_path)
+    return TARGET_ROIS.get(key, None)
+
