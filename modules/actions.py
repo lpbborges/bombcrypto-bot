@@ -12,6 +12,11 @@ import time
 import pyautogui
 import config
 
+import shutil
+import subprocess
+
+HAS_HYPRCTL = shutil.which("hyprctl") is not None
+
 # Enable PyAutoGUI fail-safe (moving mouse to any corner stops execution)
 pyautogui.FAILSAFE = True
 
@@ -26,14 +31,24 @@ class ActionEngine:
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
+        Supports Hyprland Wayland native hardware cursor positioning.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
-        duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
-        pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
+        if HAS_HYPRCTL:
+            try:
+                subprocess.run(["hyprctl", "dispatch", "movecursor", str(target_x), str(target_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(0.15)
+            except Exception:
+                duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
+                pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
+        else:
+            duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
+            pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
+
         pyautogui.click()
-        print(f"[ACTION] Clicked at ({target_x}, {target_y})")
+        print(f"[ACTION] Moved cursor and clicked at ({target_x}, {target_y})")
 
     @staticmethod
     def click_match(match_result):
