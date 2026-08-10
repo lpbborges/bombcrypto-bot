@@ -12,10 +12,23 @@ import time
 import pyautogui
 import config
 
+import json
 import shutil
 import subprocess
 
 HAS_HYPRCTL = shutil.which("hyprctl") is not None
+
+def get_hyprland_scale():
+    """Queries Hyprland monitor display scale (e.g. 1.2 for 120% scale)."""
+    if HAS_HYPRCTL:
+        try:
+            proc = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=2)
+            monitors = json.loads(proc.stdout)
+            if monitors and isinstance(monitors, list):
+                return float(monitors[0].get("scale", 1.0))
+        except Exception:
+            pass
+    return 1.0
 
 # Enable PyAutoGUI fail-safe (moving mouse to any corner stops execution)
 pyautogui.FAILSAFE = True
@@ -31,14 +44,17 @@ class ActionEngine:
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
-        Supports Hyprland Wayland native hardware cursor positioning.
+        Supports Hyprland Wayland native hardware cursor positioning with display scale compensation.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
         if HAS_HYPRCTL:
             try:
-                subprocess.run(["hyprctl", "dispatch", "movecursor", str(target_x), str(target_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                scale = get_hyprland_scale()
+                logic_x = int(target_x / scale)
+                logic_y = int(target_y / scale)
+                subprocess.run(["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(0.15)
             except Exception:
                 duration = random.uniform(config.MIN_CLICK_DURATION, config.MAX_CLICK_DURATION)
@@ -48,7 +64,7 @@ class ActionEngine:
             pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
 
         pyautogui.click()
-        print(f"[ACTION] Moved cursor and clicked at ({target_x}, {target_y})")
+        print(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
 
     @staticmethod
     def click_match(match_result):
