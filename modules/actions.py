@@ -44,29 +44,31 @@ class ActionEngine:
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
-        Supports Hyprland Wayland native hardware cursor positioning with display scale compensation.
+        Supports Hyprland Wayland native hardware cursor positioning and compositor clicking.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
-        # 1. Sync PyAutoGUI internal X11 pointer position
-        try:
-            pyautogui.moveTo(target_x, target_y)
-        except Exception:
-            pass
-
-        # 2. Dispatch Wayland hardware cursor move via hyprctl (if running Hyprland)
         if HAS_HYPRCTL:
             try:
                 scale = get_hyprland_scale()
                 logic_x = int(target_x / scale)
                 logic_y = int(target_y / scale)
+                # 1. Move hardware cursor
                 subprocess.run(["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(0.15)
-            except Exception:
-                pass
+                # 2. Dispatch native Hyprland Wayland mouse click
+                subprocess.run(["hyprctl", "dispatch", "mouse", "click", "left"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"[ACTION] Dispatched Hyprland native click at ({target_x}, {target_y}) [Scaled: ({logic_x}, {logic_y})]")
+                return
+            except Exception as e:
+                print(f"[ACTION] Warning: hyprctl click failed ({e}). Falling back to pyautogui.")
 
-        # 3. Perform human-like mouse press and release (100ms hold) for WebGL canvas event registration
+        # Fallback to PyAutoGUI click
+        try:
+            pyautogui.moveTo(target_x, target_y)
+        except Exception:
+            pass
         pyautogui.mouseDown(button='left')
         time.sleep(0.10)
         pyautogui.mouseUp(button='left')
