@@ -17,18 +17,22 @@ from modules.browser import BraveManager
 from modules.bot_logic import BombCryptoBot
 
 def main():
-    brave_status = "Running" if BraveManager.is_brave_running() else "Not Running (Auto-launch enabled)"
+    browser_info = BraveManager.get_attached_browser_info()
     
     print("==================================================")
     print("           BOMB CRYPTO AUTOMATION BOT             ")
     print("==================================================")
-    print("Press Ctrl+C in terminal or move mouse to screen corner to emergency exit.")
-    print(f"Target Browser: Brave ({brave_status})")
-    print(f"Target Images Directory: {config.TARGETS_DIR}")
-    print(f"Direct Landing Mode: {config.DIRECT_LANDING_MODE}")
-    print(f"Direct URL: {config.DIRECT_TREASURE_URL}")
-    print(f"Hero Work Interval: {config.HERO_WORK_INTERVAL_MINUTES} minutes")
-    print("==================================================\n")
+    print(" [ATTACHED BROWSER INFO]")
+    print(f"  • Name:       {browser_info['name']}")
+    print(f"  • Process ID: PID {browser_info['pid']}")
+    print(f"  • Binary Exe: {browser_info['exe']}")
+    print(f"  • Status:     {browser_info['status']}")
+    print("--------------------------------------------------")
+    print(f"  • Direct URL: {config.DIRECT_TREASURE_URL}")
+    print(f"  • Interval:   {config.HERO_WORK_INTERVAL_MINUTES} minutes hero work cycle")
+    print(f"  • Targets:    {config.TARGETS_DIR}")
+    print("==================================================")
+    print("Press Ctrl+C or move mouse to screen corner to exit.\n")
 
     # Verify Brave browser status
     if config.AUTO_LAUNCH_BRAVE:
