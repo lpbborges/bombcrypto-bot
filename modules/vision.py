@@ -54,7 +54,7 @@ class VisionEngine:
             gray_img = cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
 
         if config.SAVE_DEBUG_IMAGES and gray_img is not None:
-            debug_path = os.path.join(config.BASE_DIR, "debug_last_screen.png")
+            debug_path = os.path.join(config.DEBUG_DIR, "debug_last_screen.png")
             cv2.imwrite(debug_path, gray_img)
 
         return gray_img
@@ -82,7 +82,7 @@ class VisionEngine:
         cv2.putText(debug_img, label, (top_left[0], max(20, top_left[1] - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        match_path = os.path.join(config.BASE_DIR, "debug_last_match.png")
+        match_path = os.path.join(config.DEBUG_DIR, "debug_last_match.png")
         cv2.imwrite(match_path, debug_img)
         print(f"[VISION DEBUG] Saved match visualization to: {match_path}")
 

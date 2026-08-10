@@ -3,6 +3,10 @@ import os
 # Base Directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGETS_DIR = os.path.join(BASE_DIR, "targets")
+DEBUG_DIR = os.path.join(BASE_DIR, "debug")
+
+# Ensure debug directory exists
+os.makedirs(DEBUG_DIR, exist_ok=True)
 
 # Direct Game Landing URL & Browser Settings
 DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
@@ -13,8 +17,8 @@ AUTO_LAUNCH_BRAVE = True       # Automatically launch Brave with direct game URL
 # Vision & Debugging Settings
 DEFAULT_MATCH_THRESHOLD = 0.70  # Accurate match threshold (prevents false positives)
 SCREENSHOT_MONITOR_INDEX = 1   # 1 for primary monitor
-SAVE_DEBUG_IMAGES = True       # Saves debug_last_screen.png and debug_last_match.png on every capture
-LOG_FILE_PATH = os.path.join(BASE_DIR, "bot_activity.log")
+SAVE_DEBUG_IMAGES = True       # Saves debug_last_screen.png and debug_last_match.png inside debug/ folder
+LOG_FILE_PATH = os.path.join(DEBUG_DIR, "bot_activity.log")
 
 # Human-like Interaction Settings
 MOUSE_CLICK_OFFSET = 5          # Random offset +/- pixels from center

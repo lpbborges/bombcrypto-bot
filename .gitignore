@@ -48,3 +48,9 @@ Thumbs.db
 *.env
 *.key
 *.pem
+
+# Debug outputs & logs
+debug/
+*.log
+debug_*.png
+live_debug_screen.png
