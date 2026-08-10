@@ -1,7 +1,13 @@
-import time
-import config
-from modules.vision import VisionEngine
-from modules.actions import ActionEngine
+def format_duration(seconds):
+    """Formats duration into mm:ss:zzz (e.g. 05:23:450) or hh:mm:ss:zzz."""
+    if seconds <= 0:
+        return "00:00:000"
+    mins, secs = divmod(int(seconds), 60)
+    millis = int((seconds - int(seconds)) * 1000)
+    if mins >= 60:
+        hours, mins = divmod(mins, 60)
+        return f"{hours:02d}:{mins:02d}:{secs:02d}:{millis:03d}"
+    return f"{mins:02d}:{secs:02d}:{millis:03d}"
 
 class BombCryptoBot:
     def __init__(self):
@@ -156,13 +162,23 @@ class BombCryptoBot:
             return
 
         # Step 3: Check if it's time to send heroes to work
-        elapsed_minutes = (time.time() - self.last_hero_work_time) / 60.0
-        if self.last_hero_work_time == 0 or elapsed_minutes >= config.HERO_WORK_INTERVAL_MINUTES:
-            print(f"[BOT] {elapsed_minutes:.1f} min elapsed since last work trigger. Sending heroes...")
+        if self.last_hero_work_time == 0:
+            print("[BOT] Initial work cycle starting. Sending heroes to work...")
             if self.send_heroes_to_work():
                 self.enter_treasure_hunt()
         else:
-            print(f"[BOT] Heroes working/resting. Next work trigger in {config.HERO_WORK_INTERVAL_MINUTES - elapsed_minutes:.1f} minutes.")
+            elapsed_seconds = time.time() - self.last_hero_work_time
+            elapsed_str = format_duration(elapsed_seconds)
+            interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
+
+            if elapsed_seconds >= interval_seconds:
+                print(f"[BOT] {elapsed_str} (mm:ss:zzz) elapsed since last work trigger. Sending heroes to work...")
+                if self.send_heroes_to_work():
+                    self.enter_treasure_hunt()
+            else:
+                remaining_seconds = interval_seconds - elapsed_seconds
+                remaining_str = format_duration(remaining_seconds)
+                print(f"[BOT] Heroes active/resting ({elapsed_str} elapsed). Next work trigger in {remaining_str} (mm:ss:zzz).")
 
         # Step 4: Ensure we are inside Treasure Hunt map
         self.enter_treasure_hunt()
