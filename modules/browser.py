@@ -289,6 +289,301 @@ class BrowserManager:
         """Backward compatible helper to verify and launch browser."""
         return BrowserManager.verify_and_ensure_browser()
 
+    @staticmethod
+    def get_url_from_process_args() -> str | None:
+        """Inspects command-line arguments of active browser processes for game URLs."""
+        try:
+            if sys.platform == "win32":
+                cmd = [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Process | Where-Object {$_.CommandLine -match 'bombcrypto|v13d|v10l'} | Select-Object -ExpandProperty CommandLine",
+                ]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if proc.returncode == 0:
+                    for line in proc.stdout.splitlines():
+                        for token in line.split():
+                            clean_token = token.strip("'\"")
+                            if any(
+                                k in clean_token.lower() for k in ["bombcrypto", "v13d", "v10l"]
+                            ):
+                                return clean_token
+            else:
+                output = subprocess.check_output(["ps", "-eo", "pid,comm,args"], text=True)
+                for line in output.splitlines():
+                    if any(
+                        b in line.lower()
+                        for b in ["chrome", "brave", "firefox", "edge", "opera", "vivaldi"]
+                    ):
+                        for token in line.split():
+                            clean_token = token.strip("'\"")
+                            if any(
+                                k in clean_token.lower() for k in ["bombcrypto", "v13d", "v10l"]
+                            ) and not clean_token.startswith("--"):
+                                return clean_token
+        except Exception as e:
+            logger.debug(f"[BROWSER] Notice scanning process arguments: {e}")
+        return None
+
+    @staticmethod
+    def get_browser_window_title() -> str:
+        """Gets window title string of active browser window."""
+        if sys.platform.startswith("linux"):
+            if shutil.which("hyprctl"):
+                try:
+                    proc = subprocess.run(
+                        ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=2
+                    )
+                    if proc.returncode == 0:
+                        import json
+
+                        clients = json.loads(proc.stdout)
+                        for c in clients:
+                            cls = c.get("class", "").lower()
+                            title = c.get("title", "")
+                            if any(
+                                b in cls
+                                for b in [
+                                    "chrome",
+                                    "brave",
+                                    "firefox",
+                                    "edge",
+                                    "opera",
+                                    "vivaldi",
+                                    "chromium",
+                                ]
+                            ):
+                                if title:
+                                    return title
+                except Exception:
+                    pass
+            if shutil.which("xdotool"):
+                try:
+                    proc = subprocess.run(
+                        ["xdotool", "getactivewindow", "getwindowname"],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    if proc.returncode == 0 and proc.stdout.strip():
+                        return proc.stdout.strip()
+                except Exception:
+                    pass
+        elif sys.platform == "win32":
+            try:
+                cmd = [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-Process | Where-Object {$_.MainWindowTitle -and ($_.ProcessName -match 'chrome|brave|firefox|msedge')} | Select-Object -ExpandProperty MainWindowTitle",
+                ]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                if proc.returncode == 0 and proc.stdout.strip():
+                    return proc.stdout.strip()
+            except Exception:
+                pass
+        elif sys.platform == "darwin":
+            try:
+                cmd = [
+                    "osascript",
+                    "-e",
+                    'tell application "System Events" to get name of window 1 of (first process whose frontmost is true)',
+                ]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+                if proc.returncode == 0 and proc.stdout.strip():
+                    return proc.stdout.strip()
+            except Exception:
+                pass
+
+        return ""
+
+    @staticmethod
+    def get_url_via_clipboard() -> str | None:
+        """
+        Attempts to read URL directly from browser address bar by triggering Ctrl+L -> Ctrl+C.
+        Restores original clipboard content after reading.
+        """
+        if getattr(config, "DRY_RUN", False):
+            return None
+
+        original_clip = get_clipboard_text()
+        try:
+            import time
+            import pyautogui
+
+            pyautogui.hotkey("ctrl", "l")
+            time.sleep(0.15)
+            pyautogui.hotkey("ctrl", "c")
+            time.sleep(0.15)
+            pyautogui.press("escape")
+
+            new_clip = get_clipboard_text()
+            if new_clip and new_clip != original_clip:
+                if any(
+                    k in new_clip.lower()
+                    for k in ["bombcrypto", "v13d", "v10l", "http://", "https://"]
+                ):
+                    logger.info(f"[BROWSER] Retrieved URL from browser address bar: {new_clip}")
+                    return new_clip
+        except Exception as err:
+            logger.debug(f"[BROWSER] Clipboard URL fetch notice: {err}")
+
+        if original_clip and any(
+            k in original_clip.lower() for k in ["bombcrypto", "v13d", "v10l"]
+        ):
+            return original_clip
+
+        return None
+
+    @staticmethod
+    def get_open_browser_url(try_clipboard: bool = False) -> str | None:
+        """
+        Detects URL of the currently open browser tab using multiple detection strategies:
+        1. Process command line arguments inspection.
+        2. Active window title inspection.
+        3. Address bar clipboard copy (optional/fallback).
+        """
+        # 1. Try process arguments
+        url = BrowserManager.get_url_from_process_args()
+        if url:
+            return url
+
+        # 2. Try window title if it contains full URL or game domain
+        title = BrowserManager.get_browser_window_title()
+        if title and (
+            "http://" in title.lower()
+            or "https://" in title.lower()
+            or "bombcrypto.io" in title.lower()
+        ):
+            for token in title.split():
+                if any(
+                    k in token.lower()
+                    for k in ["bombcrypto", "v13d", "v10l", "http://", "https://"]
+                ):
+                    return token.strip("'\"()")
+
+        # 3. Try clipboard address bar fetch if enabled
+        if try_clipboard:
+            url = BrowserManager.get_url_via_clipboard()
+            if url:
+                return url
+
+        # 4. Fallback check on current clipboard content
+        clip_text = get_clipboard_text()
+        if clip_text and any(
+            k in clip_text.lower() for k in ["game.bombcrypto.io", "v13d", "v10l"]
+        ):
+            return clip_text
+
+        return None
+
+    @staticmethod
+    def detect_game_version(try_clipboard: bool = False) -> str | None:
+        """
+        Detects game version ('v13d' or 'v10l') by examining the open browser URL and window title.
+        Returns 'v13d', 'v10l', or None if undetected.
+        """
+        url = BrowserManager.get_open_browser_url(try_clipboard=try_clipboard)
+        if url:
+            url_lower = url.lower()
+            if "v10l" in url_lower:
+                return "v10l"
+            if "v13d" in url_lower:
+                return "v13d"
+
+        title = BrowserManager.get_browser_window_title()
+        if title:
+            title_lower = title.lower()
+            if "v10l" in title_lower:
+                return "v10l"
+            if "v13d" in title_lower:
+                return "v13d"
+
+        return None
+
+    @staticmethod
+    def sync_game_version_from_browser(try_clipboard: bool = False) -> str:
+        """
+        Auto-detects open browser URL/version and updates config.GAME_VERSION,
+        config.DIRECT_TREASURE_URL, and config.DIRECT_LANDING_MODE accordingly.
+        Returns the detected or active game version string.
+        """
+        detected_url = BrowserManager.get_open_browser_url(try_clipboard=try_clipboard)
+        detected_ver = BrowserManager.detect_game_version(try_clipboard=try_clipboard)
+
+        if detected_url:
+            logger.info(f"[BROWSER] Detected open browser URL: {detected_url}")
+            config.DIRECT_TREASURE_URL = detected_url
+
+        if detected_ver in ("v13d", "v10l"):
+            old_ver = getattr(config, "GAME_VERSION", "v13d")
+            config.GAME_VERSION = detected_ver
+            config.DIRECT_LANDING_MODE = detected_ver == "v13d"
+            if old_ver != detected_ver:
+                logger.info(
+                    f"[BROWSER] Auto-detected Game Version: {old_ver} -> {detected_ver.upper()}"
+                )
+            else:
+                logger.info(f"[BROWSER] Auto-detected Game Version: {detected_ver.upper()}")
+            return detected_ver
+        else:
+            cur_ver = (
+                getattr(config, "GAME_VERSION", "v13d")
+                if getattr(config, "GAME_VERSION", "auto") != "auto"
+                else "v13d"
+            )
+            config.GAME_VERSION = cur_ver
+            config.DIRECT_LANDING_MODE = cur_ver == "v13d"
+            logger.info(f"[BROWSER] Could not auto-detect version. Using: {cur_ver.upper()}")
+            return cur_ver
+
+
+def get_clipboard_text() -> str:
+    """Safely reads system clipboard text across Linux, macOS, and Windows."""
+    try:
+        import pyperclip
+
+        text = pyperclip.paste()
+        if text:
+            return text.strip()
+    except Exception:
+        pass
+
+    if sys.platform.startswith("linux"):
+        if shutil.which("wl-paste"):
+            try:
+                return subprocess.check_output(
+                    ["wl-paste", "--no-newline"], text=True, timeout=1
+                ).strip()
+            except Exception:
+                pass
+        if shutil.which("xclip"):
+            try:
+                return subprocess.check_output(
+                    ["xclip", "-selection", "clipboard", "-o"], text=True, timeout=1
+                ).strip()
+            except Exception:
+                pass
+        if shutil.which("xsel"):
+            try:
+                return subprocess.check_output(["xsel", "-b", "-o"], text=True, timeout=1).strip()
+            except Exception:
+                pass
+    elif sys.platform == "darwin":
+        try:
+            return subprocess.check_output(["pbpaste"], text=True, timeout=1).strip()
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            cmd = ["powershell", "-NoProfile", "-Command", "Get-Clipboard"]
+            return subprocess.check_output(cmd, text=True, timeout=2).strip()
+        except Exception:
+            pass
+
+    return ""
+
 
 # Backward compatibility alias
 BraveManager = BrowserManager

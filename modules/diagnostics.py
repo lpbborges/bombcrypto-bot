@@ -182,15 +182,17 @@ class SystemDiagnostic:
         }
 
         # 6. Browser Environment & Executable Verification
-        print(" [6/6] Browser & Direct Landing Configuration:")
+        print(" [6/6] Browser & Game Version Configuration:")
         target_bname = BrowserManager.get_target_browser_name()
         b_info = BrowserManager.get_attached_browser_info()
         b_exe = BrowserManager.find_browser_executable(target_bname)
 
+        print(f"   • Game Version:      {getattr(config, 'GAME_VERSION', 'v13d').upper()}")
         print(f"   • Target Browser:    {target_bname.capitalize()}")
         print(f"   • Executable Path:   {b_exe or 'Not Found on PATH'}")
         print(f"   • Attached Status:   {b_info['status']}")
         print(f"   • Direct URL Mode:   {config.DIRECT_TREASURE_URL}")
+        print(f"   • Direct Landing:    {config.DIRECT_LANDING_MODE}")
 
         if not b_exe and target_bname != "default":
             print(f"   • [WARN] Could not find executable binary for '{target_bname}'.")
@@ -226,6 +228,9 @@ def run_setup_wizard():
     print("==================================================\n")
     print("This wizard will help you configure your bot settings in '.env'.\n")
 
+    default_version = (
+        input("Game version (v13d / v10l) [default: v13d]: ").strip().lower() or "v13d"
+    )
     default_interval = input("Hero work interval in minutes (default: 30): ").strip() or "30"
     default_browser = (
         input(
@@ -242,6 +247,7 @@ def run_setup_wizard():
     telegram_chat = input("Telegram Chat ID (optional): ").strip()
 
     env_content = f"""# Bomb Crypto Automation Bot Configuration File
+GAME_VERSION={default_version}
 HERO_WORK_INTERVAL_MINUTES={default_interval}
 TARGET_BROWSER={default_browser}
 ONLY_REFRESH_ON_ERROR={"true" if only_refresh else "false"}

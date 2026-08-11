@@ -23,15 +23,27 @@ if os.path.exists(env_file):
 # Ensure debug directory exists
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
-# Direct Game Landing URL & Browser Settings
-DIRECT_TREASURE_URL = os.environ.get(
-    "DIRECT_TREASURE_URL", "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
-)
-DIRECT_LANDING_MODE = os.environ.get("DIRECT_LANDING_MODE", "true").lower() in (
-    "true",
-    "1",
-    "yes",
-)  # When True, directly targets Treasure Hunt URL, skipping menu icon navigation
+# Game Version & Direct Landing Configuration
+GAME_VERSION = os.environ.get("GAME_VERSION", "auto").lower()  # Supported: "auto", "v13d", "v10l"
+
+if "DIRECT_TREASURE_URL" in os.environ:
+    DIRECT_TREASURE_URL = os.environ["DIRECT_TREASURE_URL"]
+else:
+    if GAME_VERSION == "v10l":
+        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v10l/index.html"
+    else:
+        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+
+if "DIRECT_LANDING_MODE" in os.environ:
+    DIRECT_LANDING_MODE = os.environ["DIRECT_LANDING_MODE"].lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+else:
+    # v13d directly targets Treasure Hunt URL; v10l requires main menu Treasure Hunt button click
+    DIRECT_LANDING_MODE = GAME_VERSION != "v10l"
+
 TARGET_BROWSER = (
     os.environ.get("TARGET_BROWSER", "brave").lower()
 )  # Target browser: "brave", "chrome", "firefox", "edge", "opera", "vivaldi", "default", "auto"

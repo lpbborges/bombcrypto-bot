@@ -39,6 +39,13 @@ def parse_args():
         help="Run interactive setup wizard to create/configure .env file",
     )
     parser.add_argument(
+        "--game-version",
+        type=str,
+        choices=["auto", "v13d", "v10l"],
+        default="auto",
+        help="Game version mode: 'auto', 'v13d', or 'v10l'",
+    )
+    parser.add_argument(
         "--interval",
         type=float,
         default=config.HERO_WORK_INTERVAL_MINUTES,
@@ -140,7 +147,22 @@ def main():
         run_setup_wizard()
         sys.exit(0)
 
-    # Apply CLI argument overrides to config
+    # Apply CLI argument or auto-detected browser URL overrides to config
+    if args.game_version and args.game_version.lower() in ("v13d", "v10l"):
+        config.GAME_VERSION = args.game_version.lower()
+        if "DIRECT_TREASURE_URL" not in os.environ:
+            if config.GAME_VERSION == "v10l":
+                config.DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v10l/index.html"
+            else:
+                config.DIRECT_TREASURE_URL = (
+                    "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+                )
+        if "DIRECT_LANDING_MODE" not in os.environ:
+            config.DIRECT_LANDING_MODE = config.GAME_VERSION == "v13d"
+    else:
+        # Auto-detect game version and URL from active open browser tab
+        BrowserManager.sync_game_version_from_browser(try_clipboard=False)
+
     config.HERO_WORK_INTERVAL_MINUTES = args.interval
     config.DRY_RUN = args.dry_run
     config.DEFAULT_MATCH_THRESHOLD = args.threshold
@@ -178,6 +200,7 @@ def main():
     logger.info("==================================================")
     logger.info(" [PLATFORM INFO]")
     logger.info(f"  • Operating System: {sys.platform}")
+    logger.info(f"  • Game Version:     {config.GAME_VERSION.upper()}")
     logger.info(f"  • Target Browser:   {config.TARGET_BROWSER.capitalize()}")
     logger.info(f"  • Attached Process: {browser_info['name']} (PID: {browser_info['pid']})")
     logger.info(f"  • Executable Path:  {browser_info['exe']}")
@@ -185,6 +208,7 @@ def main():
     logger.info("--------------------------------------------------")
     logger.info(" [CLI & SYSTEM CONFIGURATION]")
     logger.info(f"  • Direct Game URL:  {config.DIRECT_TREASURE_URL}")
+    logger.info(f"  • Direct Landing:   {config.DIRECT_LANDING_MODE}")
     if config.ONLY_REFRESH_ON_ERROR:
         logger.info("  • Mode:             Only Refresh On Error (Inner Bot Active)")
     elif config.REFRESH_INTERVAL_MINUTES > 0:

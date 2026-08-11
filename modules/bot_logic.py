@@ -3,6 +3,7 @@ from enum import Enum, auto
 
 import config
 from modules.actions import ActionEngine
+from modules.browser import BrowserManager
 from modules.logger import logger
 from modules.notifications import NotificationManager
 from modules.vision import VisionEngine
@@ -40,6 +41,10 @@ class BombCryptoBot:
         self.last_idle_jitter_time = 0
         self.last_periodic_refresh_time = time.time()
         self.start_time = time.time()
+
+        # Auto-detect game version from open browser tab on initialization if auto configured
+        if getattr(config, "GAME_VERSION", "auto") == "auto":
+            BrowserManager.sync_game_version_from_browser()
 
         # Bot runtime statistics
         self.cycles_completed = 0
@@ -389,23 +394,22 @@ class BombCryptoBot:
     def enter_treasure_hunt(self) -> bool:
         """
         Ensures game is in Treasure Hunt mode.
-        If DIRECT_LANDING_MODE is enabled, the direct URL lands straight into Treasure Hunt.
-        Otherwise, attempts to locate and click the Treasure Hunt icon.
+        If DIRECT_LANDING_MODE is enabled (default for v13d), the direct URL lands straight into Treasure Hunt.
+        Otherwise (default for v10l), attempts to locate and click the Treasure Hunt icon on the main menu.
         """
         if config.DIRECT_LANDING_MODE:
-            logger.info(
-                "[BOT] Direct Treasure Hunt landing mode enabled. Skipping main menu icon click."
-            )
+            logger.info("[BOT] Direct landing mode active. Skipping main menu icon click.")
             self.update_progress()
             return True
 
+        logger.info("[BOT] Searching for Treasure Hunt icon on main menu...")
         screen = self.vision.capture_screen()
         th_match = self.vision.find_template(
             config.TARGET_IMAGES["treasure_hunt_icon"], screen_gray=screen
         )
         if th_match:
             logger.info(
-                f"[BOT] Found Treasure Hunt map icon (Confidence: {th_match['confidence']:.2f}). Entering map..."
+                f"[BOT] Found Treasure Hunt map icon (Confidence: {th_match['confidence']:.2f}). Clicking to enter map..."
             )
             ActionEngine.click_match(th_match)
             self.vision.clear_cache()
@@ -413,6 +417,7 @@ class BombCryptoBot:
             self.update_progress()
             return True
 
+        logger.info("[BOT] Treasure Hunt icon not found on current screen.")
         return False
 
     def check_map_cleared(self) -> bool:

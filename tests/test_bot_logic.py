@@ -31,6 +31,29 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         # Restore default
         importlib.reload(config)
 
+    def test_env_config_game_version_v10l(self):
+        """Tests GAME_VERSION env variable loading for v10l mode."""
+        import importlib
+        import os
+
+        with patch.dict(os.environ, {"GAME_VERSION": "v10l"}, clear=False):
+            # Temporarily pop direct variables if present to test dynamic defaults
+            old_url = os.environ.pop("DIRECT_TREASURE_URL", None)
+            old_mode = os.environ.pop("DIRECT_LANDING_MODE", None)
+            try:
+                importlib.reload(config)
+                self.assertEqual(config.GAME_VERSION, "v10l")
+                self.assertEqual(
+                    config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10l/index.html"
+                )
+                self.assertFalse(config.DIRECT_LANDING_MODE)
+            finally:
+                if old_url is not None:
+                    os.environ["DIRECT_TREASURE_URL"] = old_url
+                if old_mode is not None:
+                    os.environ["DIRECT_LANDING_MODE"] = old_mode
+                importlib.reload(config)
+
     def test_initial_state(self):
         """Tests default initialization state and parameters."""
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
@@ -160,11 +183,41 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertTrue(handled)
         mock_click.assert_called_once()
 
+    @patch.object(config, "GAME_VERSION", "v13d")
     @patch.object(config, "DIRECT_LANDING_MODE", True)
-    def test_enter_treasure_hunt_direct_mode(self):
-        """Tests direct landing mode skips menu icon matching."""
+    def test_enter_treasure_hunt_direct_mode_v13d(self):
+        """Tests direct landing mode in v13d skips menu icon matching."""
         result = self.bot.enter_treasure_hunt()
         self.assertTrue(result)
+
+    @patch.object(config, "GAME_VERSION", "v10l")
+    @patch.object(config, "DIRECT_LANDING_MODE", False)
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_enter_treasure_hunt_v10l_click_icon(
+        self, mock_delay, mock_click, mock_capture, mock_find
+    ):
+        """Tests that v10l mode locates and clicks the treasure hunt icon after refresh/login."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        mock_find.side_effect = lambda key, **k: (
+            {"x": 100, "y": 200, "confidence": 0.85} if "treasure_hunt_icon" in key else None
+        )
+
+        result = self.bot.enter_treasure_hunt()
+        self.assertTrue(result)
+        mock_click.assert_called_once_with({"x": 100, "y": 200, "confidence": 0.85})
+
+    @patch.object(config, "GAME_VERSION", "v10l")
+    @patch.object(config, "DIRECT_LANDING_MODE", False)
+    @patch("modules.vision.VisionEngine.find_template", return_value=None)
+    @patch("modules.vision.VisionEngine.capture_screen")
+    def test_enter_treasure_hunt_v10l_icon_not_found(self, mock_capture, mock_find):
+        """Tests that v10l mode returns False when treasure hunt icon is not visible."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        result = self.bot.enter_treasure_hunt()
+        self.assertFalse(result)
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")

@@ -90,6 +90,45 @@ class TestBrowserManager(unittest.TestCase):
         BrowserManager.verify_and_ensure_browser()
         mock_launch.assert_called_once()
 
+    @patch("modules.browser.BrowserManager.get_url_from_process_args")
+    def test_detect_game_version_v10l_url(self, mock_process_url):
+        """Tests auto-detecting v10l from browser process URL."""
+        mock_process_url.return_value = "https://game.bombcrypto.io/web/v10l/index.html"
+        version = BrowserManager.detect_game_version()
+        self.assertEqual(version, "v10l")
+
+    @patch("modules.browser.BrowserManager.get_url_from_process_args")
+    def test_detect_game_version_v13d_url(self, mock_process_url):
+        """Tests auto-detecting v13d from browser process URL."""
+        mock_process_url.return_value = (
+            "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+        )
+        version = BrowserManager.detect_game_version()
+        self.assertEqual(version, "v13d")
+
+    @patch("modules.browser.BrowserManager.get_url_from_process_args", return_value=None)
+    @patch("modules.browser.BrowserManager.get_browser_window_title")
+    def test_detect_game_version_v10l_window_title(self, mock_title, mock_process_url):
+        """Tests auto-detecting v10l from active browser window title."""
+        mock_title.return_value = "Bomb Crypto Game - v10l"
+        version = BrowserManager.detect_game_version()
+        self.assertEqual(version, "v10l")
+
+    @patch("modules.browser.BrowserManager.detect_game_version")
+    @patch("modules.browser.BrowserManager.get_open_browser_url")
+    def test_sync_game_version_from_browser(self, mock_url, mock_version):
+        """Tests syncing config GAME_VERSION and DIRECT_LANDING_MODE based on detected URL."""
+        mock_url.return_value = "https://game.bombcrypto.io/web/v10l/index.html"
+        mock_version.return_value = "v10l"
+
+        synced_ver = BrowserManager.sync_game_version_from_browser()
+        self.assertEqual(synced_ver, "v10l")
+        self.assertEqual(config.GAME_VERSION, "v10l")
+        self.assertFalse(config.DIRECT_LANDING_MODE)
+        self.assertEqual(
+            config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10l/index.html"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
