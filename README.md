@@ -62,9 +62,13 @@ You can tweak settings directly in `config.py` or pass them via CLI arguments:
 
 ```python
 # Inner Bot & Refresh Modes
-ONLY_REFRESH_ON_ERROR = False   # When True, only refreshes page when errors/disconnect popups appear
-REFRESH_INTERVAL_MINUTES = 0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
-ENABLE_HERO_WORK_ACTIONS = True # Set to False to skip manual hero menu clicking when game inner bot is active
+ONLY_REFRESH_ON_ERROR = False  # When True, only refreshes page when errors/disconnect popups appear
+REFRESH_INTERVAL_MINUTES = (
+    0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
+)
+ENABLE_HERO_WORK_ACTIONS = (
+    True  # Set to False to skip manual hero menu clicking when game inner bot is active
+)
 
 # Confidence threshold for visual pattern matching (0.0 to 1.0)
 DEFAULT_MATCH_THRESHOLD = 0.75

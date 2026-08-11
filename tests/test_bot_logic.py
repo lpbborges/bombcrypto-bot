@@ -270,9 +270,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.vision.VisionEngine.find_template", return_value=None)
     @patch("modules.bot_logic.BombCryptoBot.send_heroes_to_work")
-    def test_run_cycle_only_refresh_on_error(
-        self, mock_send_heroes, mock_find, mock_capture
-    ):
+    def test_run_cycle_only_refresh_on_error(self, mock_send_heroes, mock_find, mock_capture):
         """Tests that run_cycle in ONLY_REFRESH_ON_ERROR mode skips hero work clicks."""
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         self.bot.run_cycle()
@@ -282,4 +280,3 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -115,9 +115,13 @@ def main():
     if config.ONLY_REFRESH_ON_ERROR:
         logger.info("  • Mode:       Only Refresh On Error (Inner Bot Active)")
     elif config.REFRESH_INTERVAL_MINUTES > 0:
-        logger.info(f"  • Mode:       Periodic Page Refresh every {config.REFRESH_INTERVAL_MINUTES:.1f} min (Inner Bot Active)")
+        logger.info(
+            f"  • Mode:       Periodic Page Refresh every {config.REFRESH_INTERVAL_MINUTES:.1f} min (Inner Bot Active)"
+        )
     else:
-        logger.info(f"  • Hero Work:  {'ENABLED (' + str(config.HERO_WORK_INTERVAL_MINUTES) + ' min cycle)' if config.ENABLE_HERO_WORK_ACTIONS else 'DISABLED (Inner Bot Active)'}")
+        logger.info(
+            f"  • Hero Work:  {'ENABLED (' + str(config.HERO_WORK_INTERVAL_MINUTES) + ' min cycle)' if config.ENABLE_HERO_WORK_ACTIONS else 'DISABLED (Inner Bot Active)'}"
+        )
 
     logger.info(f"  • Threshold:  {config.DEFAULT_MATCH_THRESHOLD:.2f} default match threshold")
     logger.info(
@@ -129,7 +133,6 @@ def main():
     logger.info(f"  • Targets:    {config.TARGETS_DIR}")
     logger.info("==================================================")
     logger.info("Press Ctrl+C or move mouse to screen corner to exit.\n")
-
 
     NotificationManager.send_notification(
         "Bomb Crypto Bot Initialized",

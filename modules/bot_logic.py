@@ -515,4 +515,3 @@ class BombCryptoBot:
                     self.check_idle_jitter()
 
         logger.info("--- [BOT CYCLE END] ---")
-

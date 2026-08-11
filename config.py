@@ -81,7 +81,9 @@ ONLY_REFRESH_ON_ERROR = os.environ.get("ONLY_REFRESH_ON_ERROR", "").lower() in (
 REFRESH_INTERVAL_MINUTES = float(
     os.environ.get("REFRESH_INTERVAL_MINUTES", "0.0")
 )  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
-ENABLE_HERO_WORK_ACTIONS = True  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
+ENABLE_HERO_WORK_ACTIONS = (
+    True  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
+)
 
 # Target Image Filenames
 TARGET_IMAGES = {
