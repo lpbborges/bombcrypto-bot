@@ -386,3 +386,150 @@ class ActionEngine:
             except Exception as err:
                 logger.warning(f"[ACTION] F5 refresh failed ({err}).")
             ActionEngine.human_delay(5.0, 10.0)
+
+    @staticmethod
+    def drag_scroll(start_x, start_y, end_x, end_y, duration=0.35):
+        """
+        Performs mouse press, drag from (start_x, start_y) to (end_x, end_y), and release.
+        Provides drag-scrolling for Unity/HTML5 UI containers (like Bombcrypto modals).
+        Handles Hyprland display scale factor (e.g. 1.2x) and native display dispatching.
+        """
+        if getattr(config, "DRY_RUN", False):
+            logger.info(
+                f"[DRY-RUN] [ACTION] Would drag-scroll from ({start_x}, {start_y}) to ({end_x}, {end_y})"
+            )
+            return
+
+        logger.info(
+            f"[ACTION] Executing modal drag-scroll: ({start_x}, {start_y}) -> ({end_x}, {end_y})"
+        )
+
+        scale = get_hyprland_scale() if HAS_HYPRCTL else 1.0
+
+        # Convert physical screen coordinates to Hyprland logical coordinates
+        logic_start_x = int(start_x / scale)
+        logic_start_y = int(start_y / scale)
+        logic_end_x = int(end_x / scale)
+        logic_end_y = int(end_y / scale)
+
+        # 1. Native Hyprland dispatch drag (Linux Wayland)
+        if HAS_HYPRCTL:
+            try:
+                # Move cursor to logical start position
+                subprocess.run(
+                    ["hyprctl", "dispatch", "movecursor", str(logic_start_x), str(logic_start_y)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                time.sleep(0.06)
+
+                # Press left mouse button down
+                if UINPUT_MOUSE:
+                    UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                    UINPUT_MOUSE.syn()
+                else:
+                    pyautogui.mouseDown(button="left")
+
+                time.sleep(0.06)
+
+                # Interpolate move steps from start to end
+                steps = 15
+                for i in range(1, steps + 1):
+                    cur_lx = int(logic_start_x + (logic_end_x - logic_start_x) * (i / steps))
+                    cur_ly = int(logic_start_y + (logic_end_y - logic_start_y) * (i / steps))
+                    subprocess.run(
+                        ["hyprctl", "dispatch", "movecursor", str(cur_lx), str(cur_ly)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    time.sleep(max(0.01, duration / steps))
+
+                time.sleep(0.06)
+
+                # Release left mouse button
+                if UINPUT_MOUSE:
+                    UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                    UINPUT_MOUSE.syn()
+                else:
+                    pyautogui.mouseUp(button="left")
+
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] Hyprland drag-scroll notice: {err}")
+
+        # 2. Native kernel uinput drag
+        if UINPUT_MOUSE:
+            try:
+                ActionEngine.move_mouse_bezier(start_x, start_y, start_x, start_y, duration=0.05)
+                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                UINPUT_MOUSE.syn()
+                time.sleep(0.05)
+                ActionEngine.move_mouse_bezier(start_x, start_y, end_x, end_y, duration=duration)
+                time.sleep(0.05)
+                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                UINPUT_MOUSE.syn()
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] uinput drag-scroll notice: {err}")
+
+        # 3. xdotool drag (Linux X11)
+        if HAS_XDOTOOL:
+            try:
+                subprocess.run(
+                    [
+                        "xdotool",
+                        "mousemove",
+                        str(start_x),
+                        str(start_y),
+                        "mousedown",
+                        "1",
+                        "mousemove",
+                        str(end_x),
+                        str(end_y),
+                        "mouseup",
+                        "1",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] xdotool drag-scroll notice: {err}")
+
+        # 4. PyAutoGUI drag fallback
+        try:
+            pyautogui.moveTo(start_x, start_y)
+            pyautogui.dragTo(end_x, end_y, duration=duration, button="left")
+        except Exception as err:
+            logger.error(f"[ACTION] PyAutoGUI drag-scroll failed: {err}")
+
+    @staticmethod
+    def scroll_down(x=None, y=None, distance=300, clicks=5):
+        """
+        Scrolls down the UI modal by performing a click-and-drag UP gesture inside the container,
+        which scrolls the container content down in Bombcrypto and Unity web modals.
+        """
+        if getattr(config, "DRY_RUN", False):
+            logger.info(f"[DRY-RUN] [ACTION] Would scroll down modal at ({x}, {y})")
+            return
+
+        if x is None or y is None:
+            try:
+                cur_x, cur_y = pyautogui.position()
+                x, y = cur_x, cur_y
+            except Exception:
+                x, y = 960, 540
+
+        start_x = x
+        start_y = y + int(distance / 2)
+        end_x = x
+        end_y = max(50, y - int(distance / 2))
+
+        # Perform drag UP inside modal to scroll container content DOWN
+        ActionEngine.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
+
+        # Secondary wheel scroll attempt
+        try:
+            pyautogui.scroll(-int(clicks))
+        except Exception:
+            pass

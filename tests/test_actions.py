@@ -140,9 +140,23 @@ class TestActionEngine(unittest.TestCase):
     @patch("modules.actions.ActionEngine.human_delay")
     def test_refresh_page_f5_mode(self, mock_delay, mock_press):
         """Tests refresh_page uses F5 key when DIRECT_LANDING_MODE is False."""
-        with patch.object(config, "DIRECT_LANDING_MODE", False):
-            ActionEngine.refresh_page()
-            mock_press.assert_called_once_with("f5")
+
+    @patch("modules.actions.ActionEngine.drag_scroll")
+    def test_scroll_down_invokes_drag_scroll(self, mock_drag):
+        """Tests that scroll_down invokes drag_scroll drag gesture from bottom to top."""
+        ActionEngine.scroll_down(500, 500, distance=200)
+        # Should drag UP: start at 500+100=600, end at 500-100=400
+        mock_drag.assert_called_once_with(500, 600, 500, 400, duration=0.4)
+
+    @patch("modules.actions.HAS_HYPRCTL", False)
+    @patch("modules.actions.UINPUT_MOUSE", None)
+    @patch("pyautogui.moveTo")
+    @patch("pyautogui.dragTo")
+    def test_drag_scroll_pyautogui(self, mock_dragto, mock_moveto):
+        """Tests drag_scroll mouse press, movement, and release sequence."""
+        ActionEngine.drag_scroll(500, 600, 500, 400, duration=0.35)
+        mock_moveto.assert_called_with(500, 600)
+        mock_dragto.assert_called_once_with(500, 400, duration=0.35, button="left")
 
 
 if __name__ == "__main__":

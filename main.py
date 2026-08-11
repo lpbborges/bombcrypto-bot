@@ -68,6 +68,25 @@ def parse_args():
         help="Skip manual hero work clicking sequence (useful when game inner bot is active)",
     )
     parser.add_argument(
+        "--work-all",
+        "--work-all-heroes",
+        action="store_true",
+        help="Send all heroes to work regardless of stamina",
+    )
+    parser.add_argument(
+        "--min-stamina",
+        type=float,
+        default=config.HERO_MIN_STAMINA,
+        help="Minimum stamina percentage to send hero to work (default: 60)",
+    )
+    parser.add_argument(
+        "--hero-work-mode",
+        type=str,
+        choices=["stamina", "all"],
+        default=config.HERO_WORK_MODE,
+        help="Hero work mode ('stamina' or 'all')",
+    )
+    parser.add_argument(
         "--browser",
         type=str,
         default=config.TARGET_BROWSER,
@@ -181,6 +200,16 @@ def main():
     if args.telegram_chat_id:
         config.TELEGRAM_CHAT_ID = args.telegram_chat_id
 
+    if args.min_stamina > 0:
+        config.HERO_MIN_STAMINA = args.min_stamina
+
+    if args.work_all:
+        config.WORK_ONLY_STAMINA = False
+        config.HERO_WORK_MODE = "all"
+    elif args.hero_work_mode:
+        config.HERO_WORK_MODE = args.hero_work_mode.lower()
+        config.WORK_ONLY_STAMINA = config.HERO_WORK_MODE != "all"
+
     if args.only_refresh_on_error:
         config.ONLY_REFRESH_ON_ERROR = True
         config.ENABLE_HERO_WORK_ACTIONS = False
@@ -219,6 +248,10 @@ def main():
         logger.info(
             f"  • Hero Work:        {'ENABLED (' + str(config.HERO_WORK_INTERVAL_MINUTES) + ' min cycle)' if config.ENABLE_HERO_WORK_ACTIONS else 'DISABLED (Inner Bot Active)'}"
         )
+    if config.WORK_ONLY_STAMINA:
+        logger.info(f"  • Hero Selection:   STAMINA (Min {config.HERO_MIN_STAMINA:.0f}%)")
+    else:
+        logger.info("  • Hero Selection:   ALL (Work All)")
 
     logger.info(f"  • Match Threshold: {config.DEFAULT_MATCH_THRESHOLD:.2f}")
     logger.info(f"  • Screenshot Monitor: Index {config.SCREENSHOT_MONITOR_INDEX}")

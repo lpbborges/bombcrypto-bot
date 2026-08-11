@@ -148,6 +148,56 @@ ENABLE_HERO_WORK_ACTIONS = os.environ.get("ENABLE_HERO_WORK_ACTIONS", "true").lo
     "yes",
 )  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
 
+# Hero Work Selection & Stamina Mode Settings (Default: stamina mode with min 60% threshold)
+HERO_WORK_MODE = os.environ.get(
+    "HERO_WORK_MODE", "stamina"
+).lower()  # Options: "stamina" (default), "all"
+WORK_ONLY_STAMINA = HERO_WORK_MODE != "all" and os.environ.get(
+    "WORK_ONLY_STAMINA", "true"
+).lower() in ("true", "1", "yes")
+HERO_MIN_STAMINA = float(
+    os.environ.get("HERO_MIN_STAMINA", "60")
+)  # Default min stamina threshold (60%)
+HERO_MODAL_MAX_SCROLLS = int(
+    os.environ.get("HERO_MODAL_MAX_SCROLLS", "4")
+)  # Number of scroll passes in hero modal
+
+STAMINA_TARGETS_DIR = os.path.join(TARGETS_DIR, "staminas")
+
+
+def load_stamina_targets(min_stamina=None):
+    """
+    Loads stamina bar template images from targets/staminas/ filtered by min_stamina percentage.
+    Default min_stamina is HERO_MIN_STAMINA (60%).
+    """
+    if min_stamina is None:
+        min_stamina = HERO_MIN_STAMINA
+
+    targets = []
+    if not os.path.exists(STAMINA_TARGETS_DIR):
+        return targets
+
+    for fname in os.listdir(STAMINA_TARGETS_DIR):
+        if not fname.endswith(".png"):
+            continue
+        name_no_ext = fname.rsplit(".", 1)[0].lower()
+        if name_no_ext == "full":
+            pct = 100.0
+        else:
+            try:
+                pct = float(name_no_ext)
+            except ValueError:
+                continue
+
+        if pct >= min_stamina:
+            full_path = os.path.join(STAMINA_TARGETS_DIR, fname)
+            targets.append((full_path, pct))
+
+    # Sort descending by stamina percentage (e.g. 100, 90, 80, 70, 60)
+    targets.sort(key=lambda x: x[1], reverse=True)
+    return targets
+
+
 # Target Image Filenames
 TARGET_IMAGES = {
     "connect_wallet": os.path.join(TARGETS_DIR, "connect_wallet.png"),
@@ -157,7 +207,10 @@ TARGET_IMAGES = {
     "bottom_arrow": os.path.join(TARGETS_DIR, "arrow_menu_button.png"),
     "heroes_button": os.path.join(TARGETS_DIR, "heroes_icon.png"),
     "work_all_button": os.path.join(TARGETS_DIR, "work_all_button.png"),
+    "work_button": os.path.join(TARGETS_DIR, "work_button.png"),
     "rest_all_button": os.path.join(TARGETS_DIR, "rest_all_button.png"),
+    "full_bar": os.path.join(TARGETS_DIR, "full_bar.png"),
+    "80_bar": os.path.join(TARGETS_DIR, "80_bar.png"),
     "close_button": os.path.join(TARGETS_DIR, "close_button.png"),
     "treasure_hunt_icon": (
         os.path.join(TARGETS_DIR, "treasure_hunt_button.png")
@@ -185,7 +238,10 @@ TARGET_THRESHOLDS = {
     "bottom_arrow": 0.70,
     "heroes_button": 0.70,
     "work_all_button": 0.75,
+    "work_button": 0.70,
     "rest_all_button": 0.75,
+    "full_bar": 0.70,
+    "80_bar": 0.70,
     "close_button": 0.70,
     "treasure_hunt_icon": 0.70,
     "treasure_hunt_button": 0.70,
@@ -208,7 +264,10 @@ TARGET_ROIS = {
     "connect_wallet": (0.0, 0.0, 1.0, 1.0),
     "confirm_profile_ok": (0.0, 0.0, 1.0, 1.0),
     "work_all_button": (0.15, 0.15, 0.85, 0.85),
+    "work_button": (0.15, 0.15, 0.85, 0.85),
     "rest_all_button": (0.15, 0.15, 0.85, 0.85),
+    "full_bar": (0.15, 0.15, 0.85, 0.85),
+    "80_bar": (0.15, 0.15, 0.85, 0.85),
     "close_button": (0.0, 0.0, 1.0, 1.0),
     "map_complete": (0.10, 0.10, 0.90, 0.90),
     "map_complete_button": (0.30, 0.10, 0.95, 0.90),

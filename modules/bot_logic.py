@@ -1,5 +1,9 @@
+import math
+import os
 import time
 from enum import Enum, auto
+
+import numpy as np
 
 import config
 from modules.actions import ActionEngine
@@ -7,6 +11,46 @@ from modules.browser import BrowserManager
 from modules.logger import logger
 from modules.notifications import NotificationManager
 from modules.vision import GameScreen, VisionEngine
+
+
+def filter_overlapping_matches(matches, min_distance=30):
+    """Filters duplicate/overlapping vision matches by distance, keeping highest confidence."""
+    if not matches:
+        return []
+    sorted_matches = sorted(matches, key=lambda m: m["confidence"], reverse=True)
+    filtered = []
+    for m in sorted_matches:
+        keep = True
+        for f in filtered:
+            dist = math.hypot(m["x"] - f["x"], m["y"] - f["y"])
+            if dist < min_distance:
+                keep = False
+                break
+        if keep:
+            filtered.append(m)
+    filtered.sort(key=lambda m: m["y"])
+    return filtered
+
+
+def calculate_stamina_percentage(stamina_crop):
+    """
+    Calculates visual stamina bar fill percentage from crop, ignoring text/numbers in the center.
+    Works on both grayscale and color arrays.
+    """
+    if stamina_crop is None or stamina_crop.size == 0:
+        return 0.0
+    if stamina_crop.ndim == 3:
+        import cv2
+
+        hsv = cv2.cvtColor(stamina_crop, cv2.COLOR_BGR2HSV)
+        green_mask = cv2.inRange(hsv, (35, 60, 60), (85, 255, 255))
+        col_has_green = np.sum(green_mask, axis=0) > 0
+        return (np.sum(col_has_green) / stamina_crop.shape[1]) * 100.0
+    else:
+        # Grayscale array: stamina fill region (intensity 90-220)
+        bright_mask = (stamina_crop >= 90) & (stamina_crop <= 220)
+        col_has_bar = np.sum(bright_mask, axis=0) >= (stamina_crop.shape[0] * 0.2)
+        return (np.sum(col_has_bar) / stamina_crop.shape[1]) * 100.0
 
 
 class BotState(Enum):
@@ -412,27 +456,144 @@ class BombCryptoBot:
             ActionEngine.human_delay(2.5, 4.5)
 
             # Step 3: Check hero action buttons inside heroes modal
-            work_all_screen = self.vision.capture_screen(force_refresh=True)
-            rest_all_match = self.vision.find_template(
-                config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
-            )
-            if rest_all_match:
-                logger.info(
-                    f"[BOT] 'Rest All' button detected (Confidence: {rest_all_match['confidence']:.2f}). All heroes are already working, taking no action."
-                )
-            else:
-                work_all_match = self.vision.find_template(
-                    config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
-                )
-                if work_all_match:
-                    logger.info(
-                        f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
+            if (
+                getattr(config, "WORK_ONLY_STAMINA", True)
+                or getattr(config, "HERO_WORK_MODE", "stamina") != "all"
+            ):
+                min_stamina = getattr(config, "HERO_MIN_STAMINA", 60.0)
+                max_scroll_passes = getattr(config, "HERO_MODAL_MAX_SCROLLS", 4)
+                logger.info(f"[BOT] Scanning hero list for stamina >= {min_stamina:.0f}%...")
+
+                stamina_targets = config.load_stamina_targets(min_stamina)
+                total_sent = 0
+
+                for scroll_pass in range(max_scroll_passes):
+                    work_all_screen = self.vision.capture_screen(force_refresh=True)
+
+                    # 1. Locate all green WORK buttons on current modal screen
+                    work_buttons_raw = []
+                    if "work_button" in config.TARGET_IMAGES and os.path.exists(
+                        config.TARGET_IMAGES["work_button"]
+                    ):
+                        work_buttons_raw = self.vision.find_all_templates(
+                            config.TARGET_IMAGES["work_button"],
+                            screen_gray=work_all_screen,
+                            threshold=0.65,
+                        )
+                    work_button_matches = filter_overlapping_matches(
+                        work_buttons_raw, min_distance=25
                     )
-                    ActionEngine.click_match(work_all_match)
-                    self.vision.clear_cache()
-                    ActionEngine.human_delay(2.0, 3.5)
+
+                    # 2. Also locate stamina bar matches from targets/staminas/
+                    stamina_raw = []
+                    for target_path, pct in stamina_targets:
+                        if os.path.exists(target_path):
+                            matches = self.vision.find_all_templates(
+                                target_path, screen_gray=work_all_screen, threshold=0.55
+                            )
+                            stamina_raw.extend(matches)
+
+                    # Fallback to full_bar and 80_bar if no staminas folder targets matched
+                    if not stamina_raw:
+                        for key in ["full_bar", "80_bar"]:
+                            if key in config.TARGET_IMAGES and os.path.exists(
+                                config.TARGET_IMAGES[key]
+                            ):
+                                matches = self.vision.find_all_templates(
+                                    config.TARGET_IMAGES[key], screen_gray=work_all_screen
+                                )
+                                stamina_raw.extend(matches)
+
+                    stamina_matches = filter_overlapping_matches(stamina_raw, min_distance=30)
+
+                    eligible_clicks = []
+
+                    # Method A: For each green WORK button, check stamina on the same row
+                    if work_button_matches:
+                        for w_btn in work_button_matches:
+                            w_x, w_y = w_btn["x"], w_btn["y"]
+
+                            # Check if template match >= min_stamina exists on same row
+                            has_bar_match = any(
+                                abs(s_m["y"] - w_y) <= 25 and s_m["x"] < w_x
+                                for s_m in stamina_matches
+                            )
+
+                            # Crop stamina bar region to the left of WORK button
+                            crop_xmin = max(0, w_x - 220)
+                            crop_xmax = max(0, w_x - 15)
+                            crop_ymin = max(0, w_y - 20)
+                            crop_ymax = min(work_all_screen.shape[0], w_y + 20)
+
+                            stamina_crop = work_all_screen[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
+                            fill_pct = calculate_stamina_percentage(stamina_crop)
+
+                            if has_bar_match or fill_pct >= (min_stamina - 5.0):
+                                eligible_clicks.append((w_x, w_y))
+
+                    # Method B: Fallback if work_button template didn't match
+                    elif stamina_matches:
+                        for s_m in stamina_matches:
+                            eligible_clicks.append((s_m["x"] + 140, s_m["y"]))
+
+                    # Filter unique click points
+                    unique_clicks = []
+                    for c_x, c_y in eligible_clicks:
+                        if not any(
+                            math.hypot(c_x - u_x, c_y - u_y) < 20 for u_x, u_y in unique_clicks
+                        ):
+                            unique_clicks.append((c_x, c_y))
+
+                    if unique_clicks:
+                        logger.info(
+                            f"[BOT] Pass {scroll_pass + 1}: Found {len(unique_clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
+                        )
+                        for click_x, click_y in unique_clicks:
+                            ActionEngine.click_at(click_x, click_y)
+                            total_sent += 1
+                            ActionEngine.human_delay(0.5, 1.2)
+
+                        self.vision.clear_cache()
+                        ActionEngine.human_delay(1.0, 2.0)
+
+                    # Perform modal scroll down if more passes remain
+                    if scroll_pass < max_scroll_passes - 1:
+                        center_x = work_all_screen.shape[1] // 2
+                        center_y = work_all_screen.shape[0] // 2
+                        ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                        self.vision.clear_cache()
+                        ActionEngine.human_delay(1.5, 2.5)
+
+                if total_sent > 0:
+                    logger.info(f"[BOT] Sent a total of {total_sent} hero(es) to work.")
                 else:
-                    logger.warning("[BOT] Neither 'Work All' nor 'Rest All' button image found.")
+                    logger.warning(
+                        f"[BOT] No heroes with stamina >= {min_stamina:.0f}% found in list."
+                    )
+            else:
+                work_all_screen = self.vision.capture_screen(force_refresh=True)
+                rest_all_match = self.vision.find_template(
+                    config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
+                )
+                if rest_all_match:
+                    logger.info(
+                        f"[BOT] 'Rest All' button detected (Confidence: {rest_all_match['confidence']:.2f}). All heroes are already working, taking no action."
+                    )
+                else:
+                    work_all_match = self.vision.find_template(
+                        config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
+                    )
+                    if work_all_match:
+                        logger.info(
+                            f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
+                        )
+                        ActionEngine.click_match(work_all_match)
+                        self.vision.clear_cache()
+                        ActionEngine.human_delay(2.0, 3.5)
+                    else:
+                        logger.warning(
+                            "[BOT] Neither 'Work All' nor 'Rest All' button image found."
+                        )
 
             # Step 4: Close Heroes Modal
             close_screen = self.vision.capture_screen(force_refresh=True)

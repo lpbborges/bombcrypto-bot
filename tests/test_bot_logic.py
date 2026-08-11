@@ -230,11 +230,15 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_find.side_effect = find_side_effect
 
-        success = self.bot.send_heroes_to_work()
-        self.assertTrue(success)
-        self.assertGreater(self.bot.last_hero_work_time, 0)
-        self.assertEqual(mock_click_match.call_count, 4)
-        mock_click_at.assert_called_once_with(50, 50)  # Screen center click to collapse HUD
+        with (
+            patch.object(config, "WORK_ONLY_STAMINA", False),
+            patch.object(config, "HERO_WORK_MODE", "all"),
+        ):
+            success = self.bot.send_heroes_to_work()
+            self.assertTrue(success)
+            self.assertGreater(self.bot.last_hero_work_time, 0)
+            self.assertEqual(mock_click_match.call_count, 4)
+            mock_click_at.assert_called_once_with(50, 50)  # Screen center click to collapse HUD
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
@@ -263,16 +267,125 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_find.side_effect = find_side_effect
 
-        success = self.bot.send_heroes_to_work()
-        self.assertTrue(success)
-        self.assertGreater(self.bot.last_hero_work_time, 0)
-        # Should click arrow_menu_button, heroes_icon, close_button (3 match clicks) and NOT rest_all_button
-        self.assertEqual(mock_click_match.call_count, 3)
-        for call_arg in mock_click_match.call_args_list:
-            matched_obj = call_arg[0][0]
-            # Verify no click was made on rest_all location
-            self.assertNotEqual(matched_obj, {"x": 50, "y": 50, "confidence": 0.9})
-        mock_click_at.assert_called_once_with(50, 50)
+        with (
+            patch.object(config, "WORK_ONLY_STAMINA", False),
+            patch.object(config, "HERO_WORK_MODE", "all"),
+        ):
+            success = self.bot.send_heroes_to_work()
+            self.assertTrue(success)
+            self.assertGreater(self.bot.last_hero_work_time, 0)
+            # Should click arrow_menu_button, heroes_icon, close_button (3 match clicks) and NOT rest_all_button
+            self.assertEqual(mock_click_match.call_count, 3)
+            for call_arg in mock_click_match.call_args_list:
+                matched_obj = call_arg[0][0]
+                # Verify no click was made on rest_all location
+                self.assertNotEqual(matched_obj, {"x": 50, "y": 50, "confidence": 0.9})
+            mock_click_at.assert_called_once_with(50, 50)
+
+    def test_filter_overlapping_matches(self):
+        """Tests filtering of duplicate/overlapping vision matches by min_distance."""
+        from modules.bot_logic import filter_overlapping_matches
+
+        raw = [
+            {"x": 100, "y": 200, "confidence": 0.80},
+            {"x": 102, "y": 201, "confidence": 0.95},  # duplicate near (100,200)
+            {"x": 100, "y": 300, "confidence": 0.85},  # distinct hero row
+        ]
+        filtered = filter_overlapping_matches(raw, min_distance=30)
+        self.assertEqual(len(filtered), 2)
+        self.assertEqual(filtered[0]["y"], 201)
+        self.assertEqual(filtered[0]["confidence"], 0.95)
+        self.assertEqual(filtered[1]["y"], 300)
+
+    def test_load_stamina_targets(self):
+        """Tests loading stamina targets from targets/staminas/ with min_stamina filter."""
+        targets_60 = config.load_stamina_targets(60.0)
+        percentages = [pct for _, pct in targets_60]
+        self.assertTrue(all(pct >= 60.0 for pct in percentages))
+        self.assertIn(100.0, percentages)
+        self.assertIn(60.0, percentages)
+        self.assertNotIn(50.0, percentages)
+
+        targets_80 = config.load_stamina_targets(80.0)
+        percentages_80 = [pct for _, pct in targets_80]
+        self.assertTrue(all(pct >= 80.0 for pct in percentages_80))
+        self.assertNotIn(70.0, percentages_80)
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.find_all_templates")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_send_heroes_to_work_stamina_mode(
+        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
+    ):
+        """Tests default stamina mode hero work sequence."""
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+        mock_capture.return_value = dummy_screen
+
+        def find_side_effect(target_path, **kwargs):
+            if "arrow_menu_button" in target_path:
+                return {"x": 10, "y": 90, "confidence": 0.8}
+            elif "heroes_icon" in target_path:
+                return {"x": 20, "y": 90, "confidence": 0.85}
+            elif "close_button" in target_path:
+                return {"x": 80, "y": 20, "confidence": 0.88}
+            return None
+
+        def find_all_side_effect(path, **k):
+            if "full.png" in path:
+                return [{"x": 200, "y": 150, "confidence": 0.9}]
+            elif "work_button" in path:
+                return [{"x": 350, "y": 152, "confidence": 0.88}]
+            return []
+
+        mock_find.side_effect = find_side_effect
+        mock_find_all.side_effect = find_all_side_effect
+
+        with (
+            patch.object(config, "WORK_ONLY_STAMINA", True),
+            patch.object(config, "HERO_WORK_MODE", "stamina"),
+            patch.object(config, "HERO_MIN_STAMINA", 60.0),
+            patch.object(config, "HERO_MODAL_MAX_SCROLLS", 1),
+        ):
+            success = self.bot.send_heroes_to_work()
+            self.assertTrue(success)
+            # click_at should be called for work_button on the same row at (350, 152)
+            mock_click_at.assert_any_call(350, 152)
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_send_heroes_to_work_work_all_mode(
+        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
+    ):
+        """Tests send_heroes_to_work in explicit work-all mode."""
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+        mock_capture.return_value = dummy_screen
+
+        def find_side_effect(target_path, **kwargs):
+            if "arrow_menu_button" in target_path:
+                return {"x": 10, "y": 90, "confidence": 0.8}
+            elif "heroes_icon" in target_path:
+                return {"x": 20, "y": 90, "confidence": 0.85}
+            elif "work_all_button" in target_path:
+                return {"x": 50, "y": 50, "confidence": 0.9}
+            elif "close_button" in target_path:
+                return {"x": 80, "y": 20, "confidence": 0.88}
+            return None
+
+        mock_find.side_effect = find_side_effect
+
+        with (
+            patch.object(config, "WORK_ONLY_STAMINA", False),
+            patch.object(config, "HERO_WORK_MODE", "all"),
+        ):
+            success = self.bot.send_heroes_to_work()
+            self.assertTrue(success)
+            self.assertEqual(mock_click_match.call_count, 4)
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")

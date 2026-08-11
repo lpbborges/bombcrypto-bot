@@ -73,8 +73,14 @@ python main.py --setup
 Launch the bot with your preferred browser and execution mode:
 
 ```bash
-# Standard mode (manages heroes, sends them to work every 30m)
+# Standard mode (sends heroes with stamina >= 60% to work every 30m)
 python main.py
+
+# Send all heroes to work regardless of stamina
+python main.py --work-all
+
+# Customize minimum stamina percentage threshold (e.g. 70%)
+python main.py --min-stamina 70
 
 # Select target browser (brave, chrome, firefox, edge, default)
 python main.py --browser chrome
@@ -106,6 +112,8 @@ All settings can be specified via command-line arguments or saved in a `.env` fi
 | `--browser-path` | `BROWSER_EXECUTABLE_PATH` | `""` | Custom absolute path to browser binary executable |
 | `--monitor` | `SCREENSHOT_MONITOR_INDEX` | `1` | Screenshot monitor index (`1` = primary, `0` = all combined) |
 | `--interval` | `HERO_WORK_INTERVAL_MINUTES` | `30` | Minutes between hero work cycles |
+| `--work-all` | `HERO_WORK_MODE` | `stamina` | Send all heroes to work regardless of stamina |
+| `--min-stamina` | `HERO_MIN_STAMINA` | `60` | Minimum stamina percentage threshold to send hero to work |
 | `--only-refresh-on-error` | `ONLY_REFRESH_ON_ERROR` | `false` | Inner bot mode: only refresh page on game error |
 | `--refresh-interval` | `REFRESH_INTERVAL_MINUTES` | `0.0` | Periodic page refresh interval in minutes |
 | `--skip-hero-work` | `ENABLE_HERO_WORK_ACTIONS` | `true` | Skip manual hero menu work clicking |
