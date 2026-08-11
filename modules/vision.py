@@ -2,6 +2,7 @@ import io
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 import cv2
@@ -213,11 +214,24 @@ class VisionEngine:
 
         # 6. Fallback if all screen capture methods failed
         if gray_img is None:
-            logger.error(
-                "[VISION] All screen capture methods failed. "
-                "If running on Ubuntu (Wayland), install 'grim' using `sudo apt install grim` "
-                "or set SCREENSHOT_MONITOR_INDEX = 0 in config.py / .env."
+            is_wayland_no_grim = (
+                sys.platform.startswith("linux")
+                and (
+                    "WAYLAND_DISPLAY" in os.environ
+                    or os.environ.get("XDG_SESSION_TYPE") == "wayland"
+                )
+                and shutil.which("grim") is None
             )
+            if is_wayland_no_grim:
+                logger.error(
+                    "[VISION] All screen capture methods failed. Wayland environment detected without 'grim'. "
+                    "Please install 'grim' (`sudo apt install grim`) or set SCREENSHOT_MONITOR_INDEX = 0 in config.py / .env."
+                )
+            else:
+                logger.error(
+                    "[VISION] All screen capture methods failed. "
+                    "Please check display connection or set SCREENSHOT_MONITOR_INDEX = 0 in config.py / .env."
+                )
             gray_img = np.zeros((1080, 1920), dtype=np.uint8)
 
         self._cached_screen = gray_img

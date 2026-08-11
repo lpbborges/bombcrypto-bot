@@ -181,6 +181,37 @@ class TestVisionEngine(unittest.TestCase):
         self.assertIsNotNone(img)
         mock_sct.grab.assert_called_once_with(mock_sct.monitors[0])
 
+    def test_conditional_grim_error_logging(self):
+        """Tests that grim install advice is only logged when on Linux/Wayland without grim."""
+        self.vision.use_wayland_grim = False
+
+        # 1. On Wayland without grim -> grim instruction logged
+        with (
+            patch("modules.vision.sys.platform", "linux"),
+            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}),
+            patch("modules.vision.shutil.which", return_value=None),
+            patch.object(self.vision, "_capture_via_mss", return_value=None),
+            patch.object(self.vision, "_capture_via_pil_imagegrab", return_value=None),
+            patch.object(self.vision, "_capture_via_cli_utils", return_value=None),
+            self.assertLogs("BombCryptoBot", level="ERROR") as cm,
+        ):
+            self.vision.capture_screen(force_refresh=True)
+            self.assertTrue(any("install 'grim'" in log for log in cm.output))
+
+        # 2. On X11 / non-Wayland -> standard error logged without grim instruction
+        self.vision.clear_cache()
+        with (
+            patch("modules.vision.sys.platform", "linux"),
+            patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=True),
+            patch("modules.vision.shutil.which", return_value=None),
+            patch.object(self.vision, "_capture_via_mss", return_value=None),
+            patch.object(self.vision, "_capture_via_pil_imagegrab", return_value=None),
+            patch.object(self.vision, "_capture_via_cli_utils", return_value=None),
+            self.assertLogs("BombCryptoBot", level="ERROR") as cm,
+        ):
+            self.vision.capture_screen(force_refresh=True)
+            self.assertFalse(any("install 'grim'" in log for log in cm.output))
+
 
 if __name__ == "__main__":
     unittest.main()
