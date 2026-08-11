@@ -533,3 +533,34 @@ class ActionEngine:
             pyautogui.scroll(-int(clicks))
         except Exception:
             pass
+
+    @staticmethod
+    def scroll_up(x=None, y=None, distance=300, clicks=5):
+        """
+        Scrolls up the UI modal by performing a click-and-drag DOWN gesture inside the container,
+        which scrolls the container content up in Bombcrypto and Unity web modals.
+        """
+        if getattr(config, "DRY_RUN", False):
+            logger.info(f"[DRY-RUN] [ACTION] Would scroll up modal at ({x}, {y})")
+            return
+
+        if x is None or y is None:
+            try:
+                cur_x, cur_y = pyautogui.position()
+                x, y = cur_x, cur_y
+            except Exception:
+                x, y = 960, 540
+
+        start_x = x
+        start_y = max(50, y - int(distance / 2))
+        end_x = x
+        end_y = y + int(distance / 2)
+
+        # Perform drag DOWN inside modal to scroll container content UP
+        ActionEngine.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
+
+        # Secondary wheel scroll attempt
+        try:
+            pyautogui.scroll(int(clicks))
+        except Exception:
+            pass

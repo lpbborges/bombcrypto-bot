@@ -311,6 +311,82 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertTrue(all(pct >= 80.0 for pct in percentages_80))
         self.assertNotIn(70.0, percentages_80)
 
+    def test_load_tier_targets(self):
+        """Tests loading tier targets from targets/tiers/ mapped to priority values."""
+        tier_targets = config.load_tier_targets()
+        self.assertGreater(len(tier_targets), 0)
+        # Verify sorted descending by priority
+        priorities = [prio for _, _, prio in tier_targets]
+        self.assertEqual(priorities, sorted(priorities, reverse=True))
+        tier_names = [name for _, name, _ in tier_targets]
+        self.assertIn("super_legendary", tier_names)
+        self.assertIn("legendary", tier_names)
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.find_all_templates")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_send_heroes_to_work_home_strategy(
+        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
+    ):
+        """Tests Home Strategy prioritizes higher tier heroes for home resting."""
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+        mock_capture.return_value = dummy_screen
+
+        def find_side_effect(target_path, **kwargs):
+            if "arrow_menu_button" in target_path:
+                return {"x": 10, "y": 90, "confidence": 0.8}
+            elif "heroes_icon" in target_path:
+                return {"x": 20, "y": 90, "confidence": 0.85}
+            elif "close_button" in target_path:
+                return {"x": 80, "y": 20, "confidence": 0.88}
+            return None
+
+        def find_all_side_effect(path, **k):
+            if "available_home.png" in path:
+                # Row 1 (y=150), Row 2 (y=250), Row 3 (y=350) have available home buttons
+                return [
+                    {"x": 400, "y": 150, "confidence": 0.85},
+                    {"x": 400, "y": 250, "confidence": 0.85},
+                    {"x": 400, "y": 350, "confidence": 0.85},
+                ]
+            elif "work_button.png" in path:
+                # Work buttons exist for Row 1 (resting Super Rare) and Row 2 (resting Super Legendary)
+                # Row 3 is currently working (no work_button.png on row 3)
+                return [
+                    {"x": 350, "y": 150, "confidence": 0.88},
+                    {"x": 350, "y": 250, "confidence": 0.88},
+                ]
+            elif "super_rare.png" in path:
+                # Row 1 has Super Rare (priority 3)
+                return [{"x": 100, "y": 150, "confidence": 0.9}]
+            elif "super_legendary.png" in path:
+                # Row 2 has Super Legendary (priority 6)
+                return [{"x": 100, "y": 250, "confidence": 0.9}]
+            return []
+
+        mock_find.side_effect = find_side_effect
+        mock_find_all.side_effect = find_all_side_effect
+
+        with (
+            patch.object(config, "WORK_ONLY_STAMINA", True),
+            patch.object(config, "HERO_WORK_MODE", "stamina"),
+            patch.object(config, "ENABLE_HOME_STRATEGY", True),
+            patch.object(config, "HERO_MODAL_MAX_SCROLLS", 1),
+        ):
+            success = self.bot.send_heroes_to_work()
+            self.assertTrue(success)
+
+            # Verify click_at was called for row 2 (Super Legendary at y=250) BEFORE row 1 (Super Rare at y=150)
+            # and row 3 (currently working, no work_button) was NOT sent to home.
+            click_at_calls = mock_click_at.call_args_list
+            home_clicks = [call[0] for call in click_at_calls if call[0][0] == 400]
+            self.assertEqual(len(home_clicks), 2)
+            self.assertEqual(home_clicks[0], (400, 250))  # Super Legendary clicked first!
+            self.assertEqual(home_clicks[1], (400, 150))  # Super Rare clicked second!
+
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.find_all_templates")
     @patch("modules.vision.VisionEngine.capture_screen")

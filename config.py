@@ -162,7 +162,25 @@ HERO_MODAL_MAX_SCROLLS = int(
     os.environ.get("HERO_MODAL_MAX_SCROLLS", "4")
 )  # Number of scroll passes in hero modal
 
+# Home Strategy Settings (Prioritize resting higher tier heroes at home for faster stamina load)
+ENABLE_HOME_STRATEGY = os.environ.get("ENABLE_HOME_STRATEGY", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+
 STAMINA_TARGETS_DIR = os.path.join(TARGETS_DIR, "staminas")
+TIERS_DIR = os.path.join(TARGETS_DIR, "tiers")
+
+# Priority ranking for hero tiers (higher integer = higher priority)
+TIER_PRIORITIES = {
+    "super_legendary": 6,
+    "legendary": 5,
+    "epic": 4,
+    "super_rare": 3,
+    "rare": 2,
+    "common": 1,
+}
 
 
 def load_stamina_targets(min_stamina=None):
@@ -198,6 +216,28 @@ def load_stamina_targets(min_stamina=None):
     return targets
 
 
+def load_tier_targets():
+    """
+    Loads tier template images from targets/tiers/ mapped to priority values.
+    Returns list of tuples: (full_path, tier_name, priority) sorted descending by priority.
+    """
+    targets = []
+    if not os.path.exists(TIERS_DIR):
+        return targets
+
+    for fname in os.listdir(TIERS_DIR):
+        if not fname.endswith(".png"):
+            continue
+        tier_name = fname.rsplit(".", 1)[0].lower()
+        priority = TIER_PRIORITIES.get(tier_name, 0)
+        full_path = os.path.join(TIERS_DIR, fname)
+        targets.append((full_path, tier_name, priority))
+
+    # Sort descending by tier priority (e.g. super_legendary 6, legendary 5, epic 4, super_rare 3)
+    targets.sort(key=lambda x: x[2], reverse=True)
+    return targets
+
+
 # Target Image Filenames
 TARGET_IMAGES = {
     "connect_wallet": os.path.join(TARGETS_DIR, "connect_wallet.png"),
@@ -209,6 +249,8 @@ TARGET_IMAGES = {
     "work_all_button": os.path.join(TARGETS_DIR, "work_all_button.png"),
     "work_button": os.path.join(TARGETS_DIR, "work_button.png"),
     "rest_all_button": os.path.join(TARGETS_DIR, "rest_all_button.png"),
+    "available_home": os.path.join(TARGETS_DIR, "available_home.png"),
+    "without_space_home": os.path.join(TARGETS_DIR, "without_space_home.png"),
     "full_bar": os.path.join(TARGETS_DIR, "full_bar.png"),
     "80_bar": os.path.join(TARGETS_DIR, "80_bar.png"),
     "close_button": os.path.join(TARGETS_DIR, "close_button.png"),
@@ -240,6 +282,8 @@ TARGET_THRESHOLDS = {
     "work_all_button": 0.75,
     "work_button": 0.70,
     "rest_all_button": 0.75,
+    "available_home": 0.70,
+    "without_space_home": 0.70,
     "full_bar": 0.70,
     "80_bar": 0.70,
     "close_button": 0.70,
@@ -266,6 +310,8 @@ TARGET_ROIS = {
     "work_all_button": (0.15, 0.15, 0.85, 0.85),
     "work_button": (0.15, 0.15, 0.85, 0.85),
     "rest_all_button": (0.15, 0.15, 0.85, 0.85),
+    "available_home": (0.15, 0.15, 0.85, 0.85),
+    "without_space_home": (0.15, 0.15, 0.85, 0.85),
     "full_bar": (0.15, 0.15, 0.85, 0.85),
     "80_bar": (0.15, 0.15, 0.85, 0.85),
     "close_button": (0.0, 0.0, 1.0, 1.0),

@@ -462,11 +462,17 @@ class BombCryptoBot:
             ):
                 min_stamina = getattr(config, "HERO_MIN_STAMINA", 60.0)
                 max_scroll_passes = getattr(config, "HERO_MODAL_MAX_SCROLLS", 4)
+                enable_home = getattr(config, "ENABLE_HOME_STRATEGY", True)
                 logger.info(f"[BOT] Scanning hero list for stamina >= {min_stamina:.0f}%...")
 
                 stamina_targets = config.load_stamina_targets(min_stamina)
+                tier_targets = config.load_tier_targets() if enable_home else []
                 total_sent = 0
+                total_sent_home = 0
 
+                all_home_candidates = []  # Full-menu collection of resting high-tier candidates
+
+                # Phase 1: Full-menu scanning for Work execution and Home candidate discovery
                 for scroll_pass in range(max_scroll_passes):
                     work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
                     if work_all_screen_color.ndim == 3:
@@ -565,6 +571,86 @@ class BombCryptoBot:
                         self.vision.clear_cache()
                         ActionEngine.human_delay(1.0, 2.0)
 
+                    # Scan Home candidates on current pass for full-menu prioritization
+                    if (
+                        enable_home
+                        and "available_home" in config.TARGET_IMAGES
+                        and os.path.exists(config.TARGET_IMAGES["available_home"])
+                    ):
+                        if unique_clicks:
+                            work_all_screen_color = self.vision.capture_screen_color(
+                                force_refresh=True
+                            )
+                            if work_all_screen_color.ndim == 3:
+                                import cv2
+
+                                work_all_screen = cv2.cvtColor(
+                                    work_all_screen_color, cv2.COLOR_BGR2GRAY
+                                )
+                            else:
+                                work_all_screen = work_all_screen_color
+
+                        remaining_work_raw = []
+                        if "work_button" in config.TARGET_IMAGES and os.path.exists(
+                            config.TARGET_IMAGES["work_button"]
+                        ):
+                            remaining_work_raw = self.vision.find_all_templates(
+                                config.TARGET_IMAGES["work_button"],
+                                screen_gray=work_all_screen,
+                                threshold=0.70,
+                            )
+                        remaining_work_matches = filter_overlapping_matches(
+                            remaining_work_raw, min_distance=25
+                        )
+
+                        available_home_raw = self.vision.find_all_templates(
+                            config.TARGET_IMAGES["available_home"],
+                            screen_gray=work_all_screen,
+                            threshold=0.75,
+                        )
+                        home_button_matches = filter_overlapping_matches(
+                            available_home_raw, min_distance=25
+                        )
+
+                        if home_button_matches and remaining_work_matches:
+                            all_tier_matches = []
+                            for t_path, t_name, priority in tier_targets:
+                                if os.path.exists(t_path):
+                                    t_raw = self.vision.find_all_templates(
+                                        t_path, screen_gray=work_all_screen, threshold=0.70
+                                    )
+                                    for tm in filter_overlapping_matches(t_raw, min_distance=20):
+                                        tm["tier_name"] = t_name
+                                        tm["priority"] = priority
+                                        all_tier_matches.append(tm)
+
+                            for h_btn in home_button_matches:
+                                h_x, h_y = h_btn["x"], h_btn["y"]
+
+                                # Hero must be currently resting (work_button present on row)
+                                is_resting = any(
+                                    abs(w_btn["y"] - h_y) <= 25 for w_btn in remaining_work_matches
+                                )
+                                if not is_resting:
+                                    continue
+
+                                # Match tier badge on same hero row
+                                tier_match = next(
+                                    (tm for tm in all_tier_matches if abs(tm["y"] - h_y) <= 30),
+                                    None,
+                                )
+
+                                if tier_match and tier_match["priority"] > 0:
+                                    all_home_candidates.append(
+                                        {
+                                            "priority": tier_match["priority"],
+                                            "tier_name": tier_match["tier_name"],
+                                            "pass": scroll_pass,
+                                            "x": h_x,
+                                            "y": h_y,
+                                        }
+                                    )
+
                     # Perform modal scroll down if more passes remain
                     if scroll_pass < max_scroll_passes - 1:
                         center_x = work_all_screen.shape[1] // 2
@@ -579,6 +665,87 @@ class BombCryptoBot:
                     logger.warning(
                         f"[BOT] No heroes with stamina >= {min_stamina:.0f}% found in list."
                     )
+
+                # Phase 2: Global Home Placement (prioritizing highest-tier resting heroes across full menu)
+                if enable_home and all_home_candidates:
+                    # Sort candidates across the ENTIRE menu by priority DESCENDING
+                    all_home_candidates.sort(key=lambda c: c["priority"], reverse=True)
+                    logger.info(
+                        f"[BOT] Full menu scan complete. Discovered {len(all_home_candidates)} resting high-tier candidate(s) for home."
+                    )
+
+                    # Scroll back to top of modal
+                    center_x = work_all_screen.shape[1] // 2
+                    center_y = work_all_screen.shape[0] // 2
+                    for _ in range(max_scroll_passes - 1):
+                        ActionEngine.scroll_up(center_x, center_y, clicks=5)
+                        time.sleep(0.1)
+                    self.vision.clear_cache()
+                    ActionEngine.human_delay(1.5, 2.5)
+
+                    # Execute home placement clicks pass by pass from top to bottom
+                    home_full = False
+                    for target_pass in range(max_scroll_passes):
+                        if home_full:
+                            break
+
+                        pass_candidates = [
+                            c for c in all_home_candidates if c["pass"] == target_pass
+                        ]
+                        if pass_candidates:
+                            pass_screen = self.vision.capture_screen(force_refresh=True)
+                            available_home_raw = self.vision.find_all_templates(
+                                config.TARGET_IMAGES["available_home"],
+                                screen_gray=pass_screen,
+                                threshold=0.75,
+                            )
+                            home_button_matches = filter_overlapping_matches(
+                                available_home_raw, min_distance=25
+                            )
+
+                            if (
+                                not home_button_matches
+                                and "without_space_home" in config.TARGET_IMAGES
+                                and os.path.exists(config.TARGET_IMAGES["without_space_home"])
+                            ):
+                                no_space = self.vision.find_template(
+                                    config.TARGET_IMAGES["without_space_home"],
+                                    screen_gray=pass_screen,
+                                )
+                                if no_space:
+                                    logger.info("[BOT] Home is full or unavailable.")
+                                    home_full = True
+
+                            if home_button_matches and not home_full:
+                                for cand in pass_candidates:
+                                    # Match candidate to available_home button on current pass screen
+                                    matched_btn = next(
+                                        (
+                                            b
+                                            for b in home_button_matches
+                                            if abs(b["y"] - cand["y"]) <= 25
+                                        ),
+                                        None,
+                                    )
+                                    click_x = matched_btn["x"] if matched_btn else cand["x"]
+                                    click_y = matched_btn["y"] if matched_btn else cand["y"]
+
+                                    ActionEngine.click_at(click_x, click_y)
+                                    total_sent_home += 1
+                                    logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
+                                    ActionEngine.human_delay(0.5, 1.2)
+
+                                self.vision.clear_cache()
+                                ActionEngine.human_delay(1.0, 2.0)
+
+                        # Scroll down to next pass if passes remain
+                        if target_pass < max_scroll_passes - 1:
+                            ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                            self.vision.clear_cache()
+                            ActionEngine.human_delay(1.5, 2.5)
+
+                if total_sent_home > 0:
+                    logger.info(f"[BOT] Sent a total of {total_sent_home} hero(es) to home.")
             else:
                 work_all_screen = self.vision.capture_screen(force_refresh=True)
                 rest_all_match = self.vision.find_template(
