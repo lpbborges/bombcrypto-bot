@@ -90,6 +90,64 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.actions.ActionEngine.click_match")
+    def test_check_errors_error_ok_button(self, mock_click, mock_capture, mock_find):
+        """Tests handling error_ok_button when detected on screen."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        mock_find.side_effect = lambda key, **k: (
+            {"x": 50, "y": 50, "confidence": 0.9} if "error_ok_button" in key else None
+        )
+
+        handled = self.bot.check_errors_or_disconnect()
+        self.assertTrue(handled)
+        mock_click.assert_called_once()
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.actions.ActionEngine.refresh_page")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    def test_check_errors_error_message_with_ok(
+        self, mock_click, mock_capture, mock_refresh, mock_find
+    ):
+        """Tests error_message detected with error_ok_button present on screen."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+
+        def side_effect(key, **k):
+            if "error_message" in key or "error_ok_button" in key:
+                return {"x": 50, "y": 50, "confidence": 0.9}
+            return None
+
+        mock_find.side_effect = side_effect
+
+        handled = self.bot.check_errors_or_disconnect()
+        self.assertTrue(handled)
+        mock_click.assert_called_once()
+        mock_refresh.assert_not_called()
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.actions.ActionEngine.refresh_page")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    def test_check_errors_error_message_without_ok(
+        self, mock_click, mock_capture, mock_refresh, mock_find
+    ):
+        """Tests error_message detected without OK button causing page refresh."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+
+        def side_effect(key, **k):
+            if "error_message" in key:
+                return {"x": 50, "y": 50, "confidence": 0.9}
+            return None
+
+        mock_find.side_effect = side_effect
+
+        handled = self.bot.check_errors_or_disconnect()
+        self.assertTrue(handled)
+        mock_click.assert_not_called()
+        mock_refresh.assert_called_once()
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.human_delay")
     def test_handle_login_confirm_profile(self, mock_delay, mock_click, mock_capture, mock_find):
         """Tests confirm profile OK popup flow."""

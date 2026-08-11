@@ -127,17 +127,21 @@ class BombCryptoBot:
 
     def check_errors_or_disconnect(self) -> bool:
         """
-        Scans for common game error modals or disconnect OK buttons.
+        Scans for common game error modals (error_message/unknown_error)
+        or error OK buttons (error_ok_button/error_ok).
         Returns True if an error was handled or page refreshed.
         """
         logger.info("[BOT] Scanning for error popups or disconnects...")
         screen = self.vision.capture_screen()
 
-        # Check for 'OK' error button
-        ok_match = self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+        # Check for 'OK' error button (checking error_ok_button first, then error_ok)
+        ok_match = self.vision.find_template(
+            config.TARGET_IMAGES["error_ok_button"], screen_gray=screen
+        ) or self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+
         if ok_match:
             logger.info(
-                f"[BOT] Error popup detected (Confidence: {ok_match['confidence']:.2f}). Clicking OK..."
+                f"[BOT] Error popup OK button detected (Confidence: {ok_match['confidence']:.2f}). Clicking OK..."
             )
             NotificationManager.notify_error_cleared("Error OK Button")
             ActionEngine.click_match(ok_match)
@@ -145,19 +149,32 @@ class BombCryptoBot:
             self.update_progress()
             return True
 
-        # Check for 'Unknown Error' modal
-        unk_match = self.vision.find_template(
-            config.TARGET_IMAGES["unknown_error"], screen_gray=screen
-        )
-        if unk_match:
+        # Check for error message modal (error_message or unknown_error)
+        err_msg_match = self.vision.find_template(
+            config.TARGET_IMAGES["error_message"], screen_gray=screen
+        ) or self.vision.find_template(config.TARGET_IMAGES["unknown_error"], screen_gray=screen)
+
+        if err_msg_match:
             logger.info(
-                f"[BOT] Unknown error detected (Confidence: {unk_match['confidence']:.2f}). Refreshing page..."
+                f"[BOT] Error message modal detected (Confidence: {err_msg_match['confidence']:.2f})."
             )
-            NotificationManager.notify_error_cleared("Unknown Error Modal")
-            ActionEngine.refresh_page()
+            # Try to see if an OK button is present to dismiss the error message modal
+            ok_match = self.vision.find_template(
+                config.TARGET_IMAGES["error_ok_button"], screen_gray=screen
+            ) or self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+
+            if ok_match:
+                logger.info("[BOT] Found OK button for error message. Clicking OK...")
+                NotificationManager.notify_error_cleared("Error Message OK Button")
+                ActionEngine.click_match(ok_match)
+            else:
+                logger.info("[BOT] No OK button found for error message modal. Refreshing page...")
+                NotificationManager.notify_error_cleared("Error Message Modal")
+                ActionEngine.refresh_page()
+                self.last_periodic_refresh_time = time.time()
+
             self.vision.clear_cache()
             self.update_progress()
-            self.last_periodic_refresh_time = time.time()
             return True
 
         return False

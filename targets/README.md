@@ -14,8 +14,8 @@ Save your small screen crops (PNG format) inside this `targets/` folder accordin
 | `heroes_button.png` | Crop of the **Heroes Icon** inside the opened bottom HUD menu. |
 | `work_all_button.png` | Crop of the green **"Work All"** button inside the Heroes list modal. |
 | `close_button.png` | Crop of the red **"X" / Close** button on top of the Heroes modal window. |
-| `error_ok.png` | Crop of the **"OK"** button on error or disconnection dialog popups. |
-| `unknown_error.png` | Crop of any distinctive text/icon on connection error popups. |
+| `error_ok.png` / `error_ok_button.png` | Crop of the **"OK"** button on error or disconnection dialog popups. |
+| `unknown_error.png` / `error_message.png` | Crop of the error message box or title text on connection error popups. |
 
 ## Execution Workflow
 
