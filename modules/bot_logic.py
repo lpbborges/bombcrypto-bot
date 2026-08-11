@@ -39,6 +39,25 @@ class BombCryptoBot:
         self.last_progress_time = time.time()
         self.last_idle_jitter_time = 0
         self.last_periodic_refresh_time = time.time()
+        self.start_time = time.time()
+
+        # Bot runtime statistics
+        self.cycles_completed = 0
+        self.hero_work_cycles_count = 0
+        self.errors_cleared_count = 0
+        self.maps_cleared_count = 0
+        self.stuck_recoveries_count = 0
+
+    def get_stats_summary(self) -> str:
+        """Returns formatted string summarizing runtime performance metrics."""
+        uptime = format_duration(time.time() - self.start_time)
+        return (
+            f"Uptime: {uptime} | Cycles: {self.cycles_completed} | "
+            f"Hero Work Cycles: {self.hero_work_cycles_count} | "
+            f"Maps Cleared: {self.maps_cleared_count} | "
+            f"Errors Cleared: {self.errors_cleared_count} | "
+            f"Stuck Recoveries: {self.stuck_recoveries_count}"
+        )
 
     def set_state(self, new_state: BotState):
         """Transitions bot state with logging."""
@@ -78,6 +97,7 @@ class BombCryptoBot:
                 f"(exceeds threshold of {config.MAX_STUCK_TIMEOUT_MINUTES} min). Triggering anti-stuck recovery..."
             )
             logger.warning(f"[BOT STUCK ALERT] {msg}")
+            self.stuck_recoveries_count += 1
             NotificationManager.notify_stuck_recovery(msg)
             self.set_state(BotState.STUCK_RECOVERY)
             return True
@@ -143,6 +163,7 @@ class BombCryptoBot:
             logger.info(
                 f"[BOT] Error popup OK button detected (Confidence: {ok_match['confidence']:.2f}). Clicking OK..."
             )
+            self.errors_cleared_count += 1
             NotificationManager.notify_error_cleared("Error OK Button")
             ActionEngine.click_match(ok_match)
             self.vision.clear_cache()
@@ -158,6 +179,7 @@ class BombCryptoBot:
             logger.info(
                 f"[BOT] Error message modal detected (Confidence: {err_msg_match['confidence']:.2f})."
             )
+            self.errors_cleared_count += 1
             # Try to see if an OK button is present to dismiss the error message modal
             ok_match = self.vision.find_template(
                 config.TARGET_IMAGES["error_ok_button"], screen_gray=screen
@@ -356,6 +378,7 @@ class BombCryptoBot:
             ActionEngine.human_delay(1.5, 2.5)
 
             self.last_hero_work_time = time.time()
+            self.hero_work_cycles_count += 1
             self.update_progress()
             NotificationManager.notify_hero_cycle("Heroes sent to work successfully.")
             return True
@@ -408,6 +431,7 @@ class BombCryptoBot:
             logger.info(
                 f"[BOT] 'Map Cleared' button detected (Confidence: {button_match['confidence']:.2f}). Transitioning map..."
             )
+            self.maps_cleared_count += 1
             NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
             ActionEngine.click_match(button_match)
@@ -425,6 +449,7 @@ class BombCryptoBot:
             logger.info(
                 f"[BOT] 'Map Cleared' modal detected (Confidence: {map_match['confidence']:.2f}). Transitioning map..."
             )
+            self.maps_cleared_count += 1
             NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
             ActionEngine.click_match(map_match)
@@ -440,7 +465,11 @@ class BombCryptoBot:
         """
         FSM-driven main decision cycle for the bot.
         """
-        logger.info(f"--- [BOT CYCLE START - State: {self.state.name}] ---")
+        self.cycles_completed += 1
+        logger.info(
+            f"--- [BOT CYCLE #{self.cycles_completed} START - State: {self.state.name}] ---"
+        )
+        logger.debug(f"[METRICS] {self.get_stats_summary()}")
 
         # Invalidate frame cache at start of cycle
         self.vision.clear_cache()

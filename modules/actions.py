@@ -18,7 +18,7 @@ from modules.logger import logger
 
 # Ensure DISPLAY environment variable is set on Linux before importing pyautogui
 if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
-    os.environ["DISPLAY"] = ":99"
+    os.environ["DISPLAY"] = ":0"
 
 try:
     import pyautogui
@@ -59,8 +59,9 @@ except Exception as uinput_err:
     UINPUT_MOUSE = None
     logger.debug(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
 
-
 HAS_HYPRCTL = shutil.which("hyprctl") is not None
+HAS_YDOTOOL = shutil.which("ydotool") is not None
+HAS_XDOTOOL = shutil.which("xdotool") is not None
 
 
 def get_hyprland_scale():
@@ -79,7 +80,10 @@ def get_hyprland_scale():
 
 
 # Enable PyAutoGUI fail-safe (moving mouse to any corner stops execution)
-pyautogui.FAILSAFE = True
+try:
+    pyautogui.FAILSAFE = True
+except Exception:
+    pass
 
 
 def generate_bezier_curve(start, end, num_points=15):
@@ -237,7 +241,7 @@ class ActionEngine:
     def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
-        Uses non-linear Bézier trajectory and uinput kernel device for native clicking.
+        Supports Bézier trajectory, kernel uinput device, ydotool (Wayland), xdotool (X11), and PyAutoGUI.
         """
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
@@ -273,7 +277,7 @@ class ActionEngine:
             except Exception:
                 pass
 
-        # 2. Perform native kernel uinput click if available
+        # 1. Perform native kernel uinput click if available
         if UINPUT_MOUSE:
             try:
                 UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
@@ -286,13 +290,51 @@ class ActionEngine:
                 )
                 return
             except Exception as err:
-                logger.warning(f"[ACTION] uinput click failed ({err}). Falling back to pyautogui.")
+                logger.warning(f"[ACTION] uinput click failed ({err}). Falling back...")
 
-        # Fallback to PyAutoGUI click
-        pyautogui.mouseDown(button="left")
-        time.sleep(0.10)
-        pyautogui.mouseUp(button="left")
-        logger.info(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
+        # 2. Perform ydotool click (Linux Wayland fallback)
+        if HAS_YDOTOOL:
+            try:
+                subprocess.run(
+                    ["ydotool", "mousemove", "-a", str(target_x), str(target_y)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                subprocess.run(
+                    ["ydotool", "click", "0xC0"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                logger.info(
+                    f"[ACTION] Performed ydotool click at physical ({target_x}, {target_y})"
+                )
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] ydotool click notice: {err}")
+
+        # 3. Perform xdotool click (Linux X11 fallback)
+        if HAS_XDOTOOL:
+            try:
+                subprocess.run(
+                    ["xdotool", "mousemove", str(target_x), str(target_y), "click", "1"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                logger.info(
+                    f"[ACTION] Performed xdotool click at physical ({target_x}, {target_y})"
+                )
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] xdotool click notice: {err}")
+
+        # 4. Fallback to PyAutoGUI click
+        try:
+            pyautogui.mouseDown(button="left")
+            time.sleep(0.10)
+            pyautogui.mouseUp(button="left")
+            logger.info(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
+        except Exception as err:
+            logger.error(f"[ACTION] All mouse click methods failed: {err}")
 
     @staticmethod
     def click_match(match_result):
@@ -313,10 +355,13 @@ class ActionEngine:
             logger.info(f"[DRY-RUN] [ACTION] Would navigate to URL: {url}")
             return
 
-        pyautogui.hotkey("ctrl", "l")
-        time.sleep(0.5)
-        pyautogui.write(url, interval=0.01)
-        pyautogui.press("enter")
+        try:
+            pyautogui.hotkey("ctrl", "l")
+            time.sleep(0.5)
+            pyautogui.write(url, interval=0.01)
+            pyautogui.press("enter")
+        except Exception as err:
+            logger.warning(f"[ACTION] hotkey URL navigation failed ({err}).")
         ActionEngine.human_delay(5.0, 10.0)
 
     @staticmethod
@@ -330,5 +375,8 @@ class ActionEngine:
                 logger.info("[DRY-RUN] [ACTION] Would press F5 to refresh page")
                 return
 
-            pyautogui.press("f5")
+            try:
+                pyautogui.press("f5")
+            except Exception as err:
+                logger.warning(f"[ACTION] F5 refresh failed ({err}).")
             ActionEngine.human_delay(5.0, 10.0)

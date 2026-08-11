@@ -79,6 +79,25 @@ class VisionEngine:
             logger.warning(f"[VISION] grim screen capture failed: {e}")
         return None
 
+    def _capture_via_mac_screencapture(self):
+        """Captures screen on macOS using native 'screencapture' tool."""
+        if sys.platform != "darwin" or not shutil.which("screencapture"):
+            return None
+        tmp_path = os.path.join(tempfile.gettempdir(), "bot_screen_mac.png")
+        try:
+            res = subprocess.run(["screencapture", "-x", tmp_path], capture_output=True, timeout=5)
+            if res.returncode == 0 and os.path.exists(tmp_path):
+                img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+                if img_np is not None and img_np.size > 0:
+                    return img_np
+        except Exception as e:
+            logger.warning(f"[VISION] macOS screencapture failed: {e}")
+        return None
+
     def _capture_via_mss(self):
         """Attempts screen capture using mss with monitor bounds checking and error handling."""
         if self.sct is None:
@@ -181,7 +200,7 @@ class VisionEngine:
     def capture_screen(self, force_refresh=False):
         """
         Captures the screen and returns a grayscale numpy array.
-        Supports Wayland (grim), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
+        Supports Wayland (grim), macOS (screencapture), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
         Saves debug_last_screen.png.
         """
         if not force_refresh and self._cached_screen is not None:
@@ -193,26 +212,30 @@ class VisionEngine:
         if self.use_wayland_grim:
             gray_img = self._capture_via_grim()
 
-        # 2. Capture via MSS (X11 / Xwayland) with error and bounds handling
+        # 2. macOS native screencapture
+        if gray_img is None and sys.platform == "darwin":
+            gray_img = self._capture_via_mac_screencapture()
+
+        # 3. Capture via MSS (X11 / Windows / macOS) with error and bounds handling
         if gray_img is None:
             try:
                 gray_img = self._capture_via_mss()
             except Exception as e:
                 logger.warning(f"[VISION] _capture_via_mss error: {e}")
 
-        # 3. Fallback to grim if mss failed and grim exists
+        # 4. Fallback to grim if mss failed and grim exists
         if gray_img is None and shutil.which("grim"):
             gray_img = self._capture_via_grim()
 
-        # 4. Fallback to PIL ImageGrab
+        # 5. Fallback to PIL ImageGrab
         if gray_img is None:
             gray_img = self._capture_via_pil_imagegrab()
 
-        # 5. Fallback to CLI screenshot tools (gnome-screenshot, scrot)
+        # 6. Fallback to CLI screenshot tools (gnome-screenshot, scrot)
         if gray_img is None:
             gray_img = self._capture_via_cli_utils()
 
-        # 6. Fallback if all screen capture methods failed
+        # 7. Fallback if all screen capture methods failed
         if gray_img is None:
             is_wayland_no_grim = (
                 sys.platform.startswith("linux")
@@ -345,8 +368,8 @@ class VisionEngine:
         best_val = -1.0
         best_match = None
 
-        # Test multi-scale matches from 0.70x to 1.30x scaling
-        scales = [1.0, 0.90, 1.10, 0.80, 1.20, 0.70, 1.30]
+        # Test multi-scale matches from 0.50x to 1.50x scaling for multi-resolution / DPI support
+        scales = [1.0, 0.90, 1.10, 0.80, 1.20, 0.70, 1.30, 0.60, 1.40, 0.50, 1.50]
         for scale in scales:
             w, h = int(orig_w * scale), int(orig_h * scale)
             if w < 10 or h < 10 or w > search_gray.shape[1] or h > search_gray.shape[0]:

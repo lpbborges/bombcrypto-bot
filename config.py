@@ -24,39 +24,88 @@ if os.path.exists(env_file):
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
 # Direct Game Landing URL & Browser Settings
-DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
-DIRECT_LANDING_MODE = (
-    True  # When True, directly targets Treasure Hunt URL, skipping menu icon navigation
+DIRECT_TREASURE_URL = os.environ.get(
+    "DIRECT_TREASURE_URL", "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
 )
-TARGET_BROWSER = "brave"  # Targeted browser ("brave")
-AUTO_LAUNCH_BRAVE = True  # Automatically launch Brave with direct game URL if not running
+DIRECT_LANDING_MODE = os.environ.get("DIRECT_LANDING_MODE", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # When True, directly targets Treasure Hunt URL, skipping menu icon navigation
+TARGET_BROWSER = (
+    os.environ.get("TARGET_BROWSER", "brave").lower()
+)  # Target browser: "brave", "chrome", "firefox", "edge", "opera", "vivaldi", "default", "auto"
+BROWSER_EXECUTABLE_PATH = os.environ.get(
+    "BROWSER_EXECUTABLE_PATH", ""
+)  # Custom browser executable path
+AUTO_LAUNCH_BROWSER = os.environ.get("AUTO_LAUNCH_BROWSER", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Automatically launch browser with direct game URL if not running
+AUTO_LAUNCH_BRAVE = AUTO_LAUNCH_BROWSER  # Backward compatibility alias
 
 # Vision & Debugging Settings
-DEFAULT_MATCH_THRESHOLD = 0.70  # Accurate match threshold (prevents false positives)
-SCREENSHOT_MONITOR_INDEX = 1  # 1 for primary monitor
-SAVE_DEBUG_IMAGES = (
-    True  # Saves debug_last_screen.png and debug_last_match.png inside debug/ folder
-)
+DEFAULT_MATCH_THRESHOLD = float(
+    os.environ.get("DEFAULT_MATCH_THRESHOLD", "0.70")
+)  # Accurate match threshold (prevents false positives)
+SCREENSHOT_MONITOR_INDEX = int(
+    os.environ.get("SCREENSHOT_MONITOR_INDEX", "1")
+)  # Monitor index (1 for primary monitor in mss, 0 for all combined)
+SAVE_DEBUG_IMAGES = os.environ.get("SAVE_DEBUG_IMAGES", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Saves debug_last_screen.png and debug_last_match.png inside debug/ folder
 LOG_FILE_PATH = os.path.join(DEBUG_DIR, "bot_activity.log")
 
 # Human-like Interaction Settings
-MOUSE_CLICK_OFFSET = 5  # Random offset +/- pixels from center
-MIN_CLICK_DURATION = 0.2  # Minimum mouse move time (seconds)
-MAX_CLICK_DURATION = 0.5  # Maximum mouse move time (seconds)
-MIN_ACTION_DELAY = 1.0  # Min delay between UI clicks (seconds)
-MAX_ACTION_DELAY = 2.5  # Max delay between UI clicks (seconds)
+MOUSE_CLICK_OFFSET = int(
+    os.environ.get("MOUSE_CLICK_OFFSET", "5")
+)  # Random offset +/- pixels from center
+MIN_CLICK_DURATION = float(
+    os.environ.get("MIN_CLICK_DURATION", "0.2")
+)  # Minimum mouse move time (seconds)
+MAX_CLICK_DURATION = float(
+    os.environ.get("MAX_CLICK_DURATION", "0.5")
+)  # Maximum mouse move time (seconds)
+MIN_ACTION_DELAY = float(
+    os.environ.get("MIN_ACTION_DELAY", "1.0")
+)  # Min delay between UI clicks (seconds)
+MAX_ACTION_DELAY = float(
+    os.environ.get("MAX_ACTION_DELAY", "2.5")
+)  # Max delay between UI clicks (seconds)
 
-# Phase 3 Anti-Detection & Humanization
-USE_BEZIER_CURVES = True  # Non-linear smooth cursor movement paths
-BEZIER_MIN_STEPS = 5  # Minimum steps for curve movement
-USE_GAUSSIAN_DELAYS = True  # Gaussian/normal distribution reaction delays
-ENABLE_IDLE_JITTER = True  # Periodic subtle mouse movement while resting
-IDLE_JITTER_INTERVAL_SECONDS = 30  # Minimum seconds between anti-AFK mouse jitters
-IDLE_JITTER_MAX_OFFSET = 15  # Max pixel variation for idle jitter
+# Anti-Detection & Humanization Settings
+USE_BEZIER_CURVES = os.environ.get("USE_BEZIER_CURVES", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Non-linear smooth cursor movement paths
+BEZIER_MIN_STEPS = int(os.environ.get("BEZIER_MIN_STEPS", "5"))  # Minimum steps for curve movement
+USE_GAUSSIAN_DELAYS = os.environ.get("USE_GAUSSIAN_DELAYS", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Gaussian/normal distribution reaction delays
+ENABLE_IDLE_JITTER = os.environ.get("ENABLE_IDLE_JITTER", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Periodic subtle mouse movement while resting
+IDLE_JITTER_INTERVAL_SECONDS = float(
+    os.environ.get("IDLE_JITTER_INTERVAL_SECONDS", "30")
+)  # Minimum seconds between anti-AFK mouse jitters
+IDLE_JITTER_MAX_OFFSET = int(
+    os.environ.get("IDLE_JITTER_MAX_OFFSET", "15")
+)  # Max pixel variation for idle jitter
 
-
-DRY_RUN = False
-ENABLE_NOTIFICATIONS = True
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() in ("true", "1", "yes")
+ENABLE_NOTIFICATIONS = os.environ.get("ENABLE_NOTIFICATIONS", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -81,9 +130,11 @@ ONLY_REFRESH_ON_ERROR = os.environ.get("ONLY_REFRESH_ON_ERROR", "").lower() in (
 REFRESH_INTERVAL_MINUTES = float(
     os.environ.get("REFRESH_INTERVAL_MINUTES", "0.0")
 )  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
-ENABLE_HERO_WORK_ACTIONS = (
-    True  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
-)
+ENABLE_HERO_WORK_ACTIONS = os.environ.get("ENABLE_HERO_WORK_ACTIONS", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
 
 # Target Image Filenames
 TARGET_IMAGES = {

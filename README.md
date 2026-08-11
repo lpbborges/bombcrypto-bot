@@ -1,26 +1,44 @@
-# Bomb Crypto Automation Bot
+# Bomb Crypto Automation Bot v2.2.0
 
-A modular, computer-vision-powered Python bot for **Bomb Crypto** (https://game.bombcrypto.io/).
+A robust, multi-platform, computer-vision-powered Python bot for **Bomb Crypto** (https://game.bombcrypto.io/).
 
-This bot uses OpenCV image pattern recognition (`cv2.matchTemplate`) and PyAutoGUI mouse simulation to automatically manage heroes, send them to work in Treasure Hunt, clear error modals, and re-connect when disconnected.
+Engineered to be **easy to use** and **work across different operating systems (Linux X11/Wayland, Windows, macOS)**, screen resolutions, and web browsers (Brave, Chrome, Firefox, Edge, or System Default).
 
 ---
 
-## Project Structure
+## 🌟 Key Features & Improvements
+
+- **Multi-OS & Desktop Support**: Works on Linux (X11 & Wayland), Windows, and macOS.
+- **Multi-Browser Integration**: Native auto-launch and process tracking for **Brave**, **Google Chrome**, **Mozilla Firefox**, **Microsoft Edge**, **Opera**, **Vivaldi**, or **System Default Browser**.
+- **System Self-Diagnostic Suite (`python main.py --check`)**: Verifies Python dependencies, display server permissions, screen capture resolution, mouse automation backends, and target image integrity.
+- **Interactive Setup Wizard (`python main.py --setup`)**: Step-by-step terminal wizard to easily create and configure your `.env` settings file.
+- **Advanced Vision Matching Engine**: Multi-scale OpenCV pattern matching (0.50x to 1.50x) supporting standard 1080p, 1440p, 4K, and HiDPI/Retina display scaling.
+- **Anti-Detection & Humanized Controls**: Non-linear cubic Bézier mouse movement trajectories, Gaussian reaction delays, anti-AFK idle mouse jitters, and uinput/ydotool/xdotool mouse input backends.
+- **Multi-Channel Notifications**: Real-time Discord Webhooks and Telegram Bot alerts for work cycles, cleared errors, completed maps, and anti-stuck recoveries.
+
+---
+
+## 📂 Project Structure
 
 ```
 bombcrypto-bot/
-├── config.py             # Settings, thresholds, delays, timers & file paths
-├── main.py               # Main bot loop entry point
-├── requirements.txt      # Python package dependencies
-├── README.md             # Setup and user guide
+├── config.py             # Global configuration defaults & env variable loading
+├── main.py               # Main CLI entry point & bot loop execution
+├── .env.example          # Environment configuration template
+├── pyproject.toml        # Project metadata and linting configuration
+├── requirements.txt      # Production dependencies
+├── requirements-dev.txt  # Development & test dependencies
 ├── modules/
 │   ├── __init__.py
-│   ├── vision.py         # OpenCV template matching engine (mss + OpenCV)
-│   ├── actions.py        # PyAutoGUI humanized mouse clicks & movements
-│   └── bot_logic.py      # State machine & automation workflow
-└── targets/              # Button template crop PNGs
-    └── README.md         # Detailed instructions for image targets
+│   ├── actions.py        # Cross-platform mouse & keyboard automation engine
+│   ├── bot_logic.py      # Finite State Machine (FSM) & stats tracker
+│   ├── browser.py        # Multi-OS browser process detector & launcher
+│   ├── diagnostics.py    # Self-test diagnostic engine & interactive setup wizard
+│   ├── logger.py         # Colorized ANSI console & file logging engine
+│   ├── notifications.py  # Discord Webhook & Telegram alert manager
+│   └── vision.py         # Multi-scale OpenCV template matching & screen grab
+├── targets/              # Template PNG images for game buttons & modals
+└── tests/                # Automated unit test suite (57+ unit tests)
 ```
 
 ---
@@ -36,66 +54,100 @@ cd bombcrypto-bot
 pip install -r requirements.txt
 ```
 
-### 2. Run the Bot
+### 2. Verify Your System Setup
 
-Open https://game.bombcrypto.io/ in your web browser and execute:
+Run the built-in diagnostic test to verify display, screen grab, mouse engine, and target images:
 
 ```bash
-# Standard mode (bot manages manual hero work menu clicks every 30m)
+python main.py --check
+```
+
+*Or run the interactive setup wizard to generate your `.env` configuration:*
+
+```bash
+python main.py --setup
+```
+
+### 3. Run the Bot
+
+Launch the bot with your preferred browser and execution mode:
+
+```bash
+# Standard mode (manages heroes, sends them to work every 30m)
 python main.py
 
-# Inner Bot Mode 1: Only refresh the page when game errors/disconnects occur
+# Select target browser (brave, chrome, firefox, edge, default)
+python main.py --browser chrome
+
+# Inner Bot Mode 1: Only refresh page when errors or disconnect popups occur
 python main.py --only-refresh-on-error
 
-# Inner Bot Mode 2: Periodically refresh browser page every 30 minutes to unstuck heroes
+# Inner Bot Mode 2: Periodically refresh browser every 30m to unstuck heroes
 python main.py --refresh-interval 30
 
-# Inner Bot Mode 3: Skip manual hero work clicks while maintaining error monitoring
+# Inner Bot Mode 3: Skip manual hero work clicks while monitoring errors
 python main.py --skip-hero-work
+
+# Dry Run Mode (simulates matching and actions without physical clicking)
+python main.py --dry-run
 ```
 
 ---
 
-## ⚙️ Configuration Options (`config.py`)
+## ⚙️ CLI Reference & Environment Variables
 
-You can tweak settings directly in `config.py` or pass them via CLI arguments:
+All settings can be specified via command-line arguments or saved in a `.env` file:
 
-```python
-# Inner Bot & Refresh Modes
-ONLY_REFRESH_ON_ERROR = False  # When True, only refreshes page when errors/disconnect popups appear
-REFRESH_INTERVAL_MINUTES = (
-    0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
-)
-ENABLE_HERO_WORK_ACTIONS = (
-    True  # Set to False to skip manual hero menu clicking when game inner bot is active
-)
+| CLI Argument | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--check` | — | — | Runs system diagnostic test and exits |
+| `--setup` | — | — | Runs interactive configuration setup wizard |
+| `--browser` | `TARGET_BROWSER` | `brave` | Browser type (`brave`, `chrome`, `firefox`, `edge`, `default`) |
+| `--browser-path` | `BROWSER_EXECUTABLE_PATH` | `""` | Custom absolute path to browser binary executable |
+| `--monitor` | `SCREENSHOT_MONITOR_INDEX` | `1` | Screenshot monitor index (`1` = primary, `0` = all combined) |
+| `--interval` | `HERO_WORK_INTERVAL_MINUTES` | `30` | Minutes between hero work cycles |
+| `--only-refresh-on-error` | `ONLY_REFRESH_ON_ERROR` | `false` | Inner bot mode: only refresh page on game error |
+| `--refresh-interval` | `REFRESH_INTERVAL_MINUTES` | `0.0` | Periodic page refresh interval in minutes |
+| `--skip-hero-work` | `ENABLE_HERO_WORK_ACTIONS` | `true` | Skip manual hero menu work clicking |
+| `--threshold` | `DEFAULT_MATCH_THRESHOLD` | `0.70` | Global visual pattern matching threshold |
+| `--dry-run` | `DRY_RUN` | `false` | Dry run simulation without mouse clicks |
+| `--headless` | `AUTO_LAUNCH_BROWSER` | `true` | Disable browser auto-launching |
+| `--discord-webhook` | `DISCORD_WEBHOOK_URL` | `""` | Discord Webhook URL for alerts |
+| `--telegram-token` | `TELEGRAM_BOT_TOKEN` | `""` | Telegram Bot API Token |
+| `--telegram-chat-id` | `TELEGRAM_CHAT_ID` | `""` | Telegram Chat ID for alerts |
 
-# Confidence threshold for visual pattern matching (0.0 to 1.0)
-DEFAULT_MATCH_THRESHOLD = 0.75
+---
 
-# How often to send heroes back to work in standard mode (in minutes)
-HERO_WORK_INTERVAL_MINUTES = 30
+## 🔧 Platform-Specific Notes & Troubleshooting
 
-# Mouse interaction speed and humanized delays
-MIN_CLICK_DURATION = 0.2
-MAX_CLICK_DURATION = 0.5
-MOUSE_CLICK_OFFSET = 5  # Pixels offset range from button center
+### 🐧 Linux (Wayland vs X11)
+- **Wayland (Ubuntu/Debian/Fedora/Arch)**: Native screen capture uses `grim`. If your screen capture returns a black image, install `grim`:
+  - Debian/Ubuntu: `sudo apt install grim`
+  - Arch Linux: `sudo pacman -S grim`
+  - Fedora: `sudo dnf install grim`
+- **Mouse Input Backends**: Supports PyAutoGUI, `/dev/uinput` kernel device, `ydotool`, `xdotool`, and Hyprland `hyprctl`.
+
+### 🪟 Windows
+- PyAutoGUI standard mouse automation and MSS screen capture work out-of-the-box. Run terminal as Administrator if interacting with elevated browser windows.
+
+### 🍎 macOS
+- **Permissions**: Ensure your terminal (Terminal, iTerm2, or VS Code) has **Screen Recording** and **Accessibility** permissions granted in *System Preferences -> Privacy & Security*.
+
+---
+
+## 🧪 Testing
+
+Run the automated test suite with pytest:
+
+```bash
+pytest
 ```
 
-
 ---
 
-## 🛡️ Anti-Stuck & Safety Features
+## ☕ Support the Project
 
-- **PyAutoGUI Emergency Fail-Safe**: Move your mouse pointer to any of the 4 corners of your screen to immediately kill the bot execution.
-- **Humanized Clicks**: Randomized click duration, Bezier mouse easing curves, and slight pixel position jitter.
-- **Auto Error Recovery**: Detects "OK" error buttons and connection popups, automatically clearing them.
-
----
-
-## ☕ Buy Me a Coffee
-
-If this bot saved you time or helped optimize your farming cycles, consider supporting the project!
+If this bot saved you time or helped optimize your farming cycles, consider supporting development!
 
 - **MetaMask / EVM (ETH, BSC, Polygon):** `0x87cAe5c5f4e8f3D5e9842b18c78e32a09b5C17Eb`
 - **Bitcoin (BTC):** `bc1q8y736rfsyz5jp76gvdz9veddcktp00rjqaw69r`
@@ -103,4 +155,5 @@ If this bot saved you time or helped optimize your farming cycles, consider supp
 ---
 
 ## ⚠️ Disclaimer
-This code is provided for educational and automation research purposes. Please ensure compliance with game terms of service.
+This project is provided for educational and automation research purposes. Please ensure compliance with game terms of service.
+
