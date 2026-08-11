@@ -230,6 +230,44 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_jitter.assert_not_called()
 
+    @patch.object(config, "ONLY_REFRESH_ON_ERROR", False)
+    @patch.object(config, "REFRESH_INTERVAL_MINUTES", 15.0)
+    @patch("modules.actions.ActionEngine.refresh_page")
+    def test_check_periodic_refresh_triggered(self, mock_refresh):
+        """Tests periodic refresh triggers page refresh when interval has elapsed."""
+        self.bot.last_periodic_refresh_time = time.time() - (15 * 60 + 10)
+        refreshed = self.bot.check_periodic_refresh()
+        self.assertTrue(refreshed)
+        mock_refresh.assert_called_once()
+        self.assertEqual(self.bot.state, BotState.INITIALIZING)
+
+    @patch.object(config, "ONLY_REFRESH_ON_ERROR", True)
+    @patch.object(config, "REFRESH_INTERVAL_MINUTES", 15.0)
+    @patch("modules.actions.ActionEngine.refresh_page")
+    def test_check_periodic_refresh_combined_mode(self, mock_refresh):
+        """Tests periodic refresh triggers even if ONLY_REFRESH_ON_ERROR is also True when interval > 0."""
+        self.bot.last_periodic_refresh_time = time.time() - (15 * 60 + 10)
+        refreshed = self.bot.check_periodic_refresh()
+        self.assertTrue(refreshed)
+        mock_refresh.assert_called_once()
+        self.assertEqual(self.bot.state, BotState.INITIALIZING)
+
+    @patch.object(config, "ONLY_REFRESH_ON_ERROR", True)
+    @patch.object(config, "ENABLE_HERO_WORK_ACTIONS", False)
+    @patch.object(config, "DIRECT_LANDING_MODE", True)
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.vision.VisionEngine.find_template", return_value=None)
+    @patch("modules.bot_logic.BombCryptoBot.send_heroes_to_work")
+    def test_run_cycle_only_refresh_on_error(
+        self, mock_send_heroes, mock_find, mock_capture
+    ):
+        """Tests that run_cycle in ONLY_REFRESH_ON_ERROR mode skips hero work clicks."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+        self.bot.run_cycle()
+        mock_send_heroes.assert_not_called()
+        self.assertEqual(self.bot.state, BotState.RESTING)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -38,6 +38,7 @@ class BombCryptoBot:
         self.last_hero_work_time = 0
         self.last_progress_time = time.time()
         self.last_idle_jitter_time = 0
+        self.last_periodic_refresh_time = time.time()
 
     def set_state(self, new_state: BotState):
         """Transitions bot state with logging."""
@@ -89,7 +90,40 @@ class BombCryptoBot:
         ActionEngine.refresh_page()
         self.vision.clear_cache()
         self.update_progress()
+        self.last_periodic_refresh_time = time.time()
         self.set_state(BotState.INITIALIZING)
+
+    def check_periodic_refresh(self) -> bool:
+        """
+        Checks if the configured periodic page refresh interval has elapsed.
+        Refreshes browser page to prevent/recover stuck heroes when inner bot is active.
+        """
+        interval_mins = getattr(config, "REFRESH_INTERVAL_MINUTES", 0.0)
+        if interval_mins <= 0:
+            return False
+
+        elapsed_seconds = time.time() - self.last_periodic_refresh_time
+        interval_seconds = interval_mins * 60.0
+
+        if elapsed_seconds >= interval_seconds:
+            elapsed_str = format_duration(elapsed_seconds)
+            logger.info(
+                f"[BOT REFRESH] Periodic refresh interval reached ({elapsed_str} elapsed / {interval_mins:.1f} min threshold). "
+                f"Refreshing browser page to unstuck heroes..."
+            )
+            NotificationManager.send_notification(
+                "Bomb Crypto Bot Periodic Refresh",
+                f"Refreshing page after {interval_mins:.1f}m interval to unstuck heroes.",
+                level="info",
+            )
+            ActionEngine.refresh_page()
+            self.vision.clear_cache()
+            self.update_progress()
+            self.last_periodic_refresh_time = time.time()
+            self.set_state(BotState.INITIALIZING)
+            return True
+
+        return False
 
     def check_errors_or_disconnect(self) -> bool:
         """
@@ -123,6 +157,7 @@ class BombCryptoBot:
             ActionEngine.refresh_page()
             self.vision.clear_cache()
             self.update_progress()
+            self.last_periodic_refresh_time = time.time()
             return True
 
         return False
@@ -417,47 +452,67 @@ class BombCryptoBot:
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 5: Check Map Cleared requirement
+        # Step 5: Check Periodic Refresh requirement (Inner Bot periodic unstuck)
+        if self.check_periodic_refresh():
+            logger.info("--- [BOT CYCLE END] ---")
+            return
+
+        # Step 6: Check Map Cleared requirement
         if self.check_map_cleared():
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 6: FSM Work & Resting Cycle Logic
-        if self.last_hero_work_time == 0:
-            logger.info("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
-            self.set_state(BotState.SENDING_HEROES)
-            if self.send_heroes_to_work():
-                self.set_state(BotState.ENTERING_MAP)
-                self.enter_treasure_hunt()
-                self.set_state(BotState.RESTING)
-        else:
-            elapsed_seconds = time.time() - self.last_hero_work_time
-            interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
+        # Step 7: FSM Work & Resting Cycle Logic
+        only_error_refresh = getattr(config, "ONLY_REFRESH_ON_ERROR", False)
+        hero_work_enabled = getattr(config, "ENABLE_HERO_WORK_ACTIONS", True)
 
-            if elapsed_seconds >= interval_seconds:
-                elapsed_str = format_duration(elapsed_seconds)
-                logger.info(
-                    f"[BOT] Work interval reached ({elapsed_str} elapsed). Transitioning to SENDING_HEROES..."
-                )
+        if only_error_refresh or not hero_work_enabled:
+            mode_desc = "Error-Only Refresh" if only_error_refresh else "Inner Bot Monitoring"
+            logger.info(
+                f"[BOT] State: {self.state.name} | Inner Bot active ({mode_desc}). "
+                f"Monitoring for errors or stuck state..."
+            )
+            if self.state != BotState.RESTING and self.enter_treasure_hunt():
+                self.set_state(BotState.RESTING)
+
+            self.check_idle_jitter()
+        else:
+            if self.last_hero_work_time == 0:
+                logger.info("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
                 self.set_state(BotState.SENDING_HEROES)
                 if self.send_heroes_to_work():
                     self.set_state(BotState.ENTERING_MAP)
                     self.enter_treasure_hunt()
                     self.set_state(BotState.RESTING)
             else:
-                remaining_seconds = interval_seconds - elapsed_seconds
-                elapsed_str = format_duration(elapsed_seconds)
-                remaining_str = format_duration(remaining_seconds)
-                logger.info(
-                    f"[BOT] State: {self.state.name} | Heroes working/resting ({elapsed_str} elapsed). "
-                    f"Next work cycle in {remaining_str}."
-                )
+                elapsed_seconds = time.time() - self.last_hero_work_time
+                interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
 
-                # Ensure we are inside Treasure Hunt map
-                if self.state != BotState.RESTING and self.enter_treasure_hunt():
-                    self.set_state(BotState.RESTING)
+                if elapsed_seconds >= interval_seconds:
+                    elapsed_str = format_duration(elapsed_seconds)
+                    logger.info(
+                        f"[BOT] Work interval reached ({elapsed_str} elapsed). Transitioning to SENDING_HEROES..."
+                    )
+                    self.set_state(BotState.SENDING_HEROES)
+                    if self.send_heroes_to_work():
+                        self.set_state(BotState.ENTERING_MAP)
+                        self.enter_treasure_hunt()
+                        self.set_state(BotState.RESTING)
+                else:
+                    remaining_seconds = interval_seconds - elapsed_seconds
+                    elapsed_str = format_duration(elapsed_seconds)
+                    remaining_str = format_duration(remaining_seconds)
+                    logger.info(
+                        f"[BOT] State: {self.state.name} | Heroes working/resting ({elapsed_str} elapsed). "
+                        f"Next work cycle in {remaining_str}."
+                    )
 
-                # Execute anti-AFK idle jitter if resting
-                self.check_idle_jitter()
+                    # Ensure we are inside Treasure Hunt map
+                    if self.state != BotState.RESTING and self.enter_treasure_hunt():
+                        self.set_state(BotState.RESTING)
+
+                    # Execute anti-AFK idle jitter if resting
+                    self.check_idle_jitter()
 
         logger.info("--- [BOT CYCLE END] ---")
+

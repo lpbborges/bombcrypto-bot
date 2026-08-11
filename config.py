@@ -51,6 +51,11 @@ HERO_WORK_INTERVAL_MINUTES = 30  # Time to sleep while heroes mine / recover sta
 ERROR_CHECK_INTERVAL_SECONDS = 15  # Frequency to scan for game errors/disconnects
 MAX_STUCK_TIMEOUT_MINUTES = 10  # Refresh page if stuck in same screen state
 
+# Inner Bot & Refresh Options (For game's native inner bot)
+ONLY_REFRESH_ON_ERROR = False  # When True, only refreshes page when error/disconnect popups are found
+REFRESH_INTERVAL_MINUTES = 0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
+ENABLE_HERO_WORK_ACTIONS = True  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
+
 # Target Image Filenames
 TARGET_IMAGES = {
     "connect_wallet": os.path.join(TARGETS_DIR, "connect_wallet.png"),

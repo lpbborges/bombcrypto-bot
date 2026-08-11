@@ -41,20 +41,35 @@ pip install -r requirements.txt
 Open https://game.bombcrypto.io/ in your web browser and execute:
 
 ```bash
+# Standard mode (bot manages manual hero work menu clicks every 30m)
 python main.py
+
+# Inner Bot Mode 1: Only refresh the page when game errors/disconnects occur
+python main.py --only-refresh-on-error
+
+# Inner Bot Mode 2: Periodically refresh browser page every 30 minutes to unstuck heroes
+python main.py --refresh-interval 30
+
+# Inner Bot Mode 3: Skip manual hero work clicks while maintaining error monitoring
+python main.py --skip-hero-work
 ```
 
 ---
 
 ## ⚙️ Configuration Options (`config.py`)
 
-You can tweak the following settings in `config.py`:
+You can tweak settings directly in `config.py` or pass them via CLI arguments:
 
 ```python
+# Inner Bot & Refresh Modes
+ONLY_REFRESH_ON_ERROR = False   # When True, only refreshes page when errors/disconnect popups appear
+REFRESH_INTERVAL_MINUTES = 0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
+ENABLE_HERO_WORK_ACTIONS = True # Set to False to skip manual hero menu clicking when game inner bot is active
+
 # Confidence threshold for visual pattern matching (0.0 to 1.0)
 DEFAULT_MATCH_THRESHOLD = 0.75
 
-# How often to send heroes back to work (in minutes)
+# How often to send heroes back to work in standard mode (in minutes)
 HERO_WORK_INTERVAL_MINUTES = 30
 
 # Mouse interaction speed and humanized delays
@@ -62,6 +77,7 @@ MIN_CLICK_DURATION = 0.2
 MAX_CLICK_DURATION = 0.5
 MOUSE_CLICK_OFFSET = 5  # Pixels offset range from button center
 ```
+
 
 ---
 
