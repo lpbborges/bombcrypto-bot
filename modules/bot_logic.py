@@ -257,20 +257,28 @@ class BombCryptoBot:
             self.vision.clear_cache()
             ActionEngine.human_delay(2.5, 4.5)
 
-            # Step 3: Click 'Work All' button inside heroes modal
+            # Step 3: Check hero action buttons inside heroes modal
             work_all_screen = self.vision.capture_screen(force_refresh=True)
-            work_all_match = self.vision.find_template(
-                config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
+            rest_all_match = self.vision.find_template(
+                config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
             )
-            if work_all_match:
+            if rest_all_match:
                 logger.info(
-                    f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
+                    f"[BOT] 'Rest All' button detected (Confidence: {rest_all_match['confidence']:.2f}). All heroes are already working, taking no action."
                 )
-                ActionEngine.click_match(work_all_match)
-                self.vision.clear_cache()
-                ActionEngine.human_delay(2.0, 3.5)
             else:
-                logger.warning("[BOT] 'Work All' button image not found.")
+                work_all_match = self.vision.find_template(
+                    config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
+                )
+                if work_all_match:
+                    logger.info(
+                        f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
+                    )
+                    ActionEngine.click_match(work_all_match)
+                    self.vision.clear_cache()
+                    ActionEngine.human_delay(2.0, 3.5)
+                else:
+                    logger.warning("[BOT] Neither 'Work All' nor 'Rest All' button image found.")
 
             # Step 4: Close Heroes Modal
             close_screen = self.vision.capture_screen(force_refresh=True)

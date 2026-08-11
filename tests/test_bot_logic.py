@@ -130,6 +130,44 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_send_heroes_to_work_all_already_working(
+        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
+    ):
+        """Tests that when rest_all_button is detected, the bot does not click rest_all_button."""
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+        mock_capture.return_value = dummy_screen
+
+        def find_side_effect(target_path, **kwargs):
+            if "arrow_menu_button" in target_path:
+                return {"x": 10, "y": 90, "confidence": 0.8}
+            elif "heroes_icon" in target_path:
+                return {"x": 20, "y": 90, "confidence": 0.85}
+            elif "rest_all_button" in target_path:
+                return {"x": 50, "y": 50, "confidence": 0.9}
+            elif "work_all_button" in target_path:
+                return {"x": 50, "y": 50, "confidence": 0.9}
+            elif "close_button" in target_path:
+                return {"x": 80, "y": 20, "confidence": 0.88}
+            return None
+
+        mock_find.side_effect = find_side_effect
+
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
+        self.assertGreater(self.bot.last_hero_work_time, 0)
+        # Should click arrow_menu_button, heroes_icon, close_button (3 match clicks) and NOT rest_all_button
+        self.assertEqual(mock_click_match.call_count, 3)
+        for call_arg in mock_click_match.call_args_list:
+            matched_obj = call_arg[0][0]
+            # Verify no click was made on rest_all location
+            self.assertNotEqual(matched_obj, {"x": 50, "y": 50, "confidence": 0.9})
+        mock_click_at.assert_called_once_with(50, 50)
+
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.human_delay")
     def test_check_map_cleared_button_detected(
         self, mock_delay, mock_click, mock_capture, mock_find
