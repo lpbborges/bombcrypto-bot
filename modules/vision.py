@@ -10,8 +10,24 @@ import mss
 import numpy as np
 from PIL import Image
 
+from enum import Enum, auto
+
 import config
 from modules.logger import logger
+
+
+class GameScreen(Enum):
+    UNKNOWN = auto()
+    LOGIN = auto()
+    METAMASK_SELECT = auto()
+    METAMASK_SIGN = auto()
+    CONFIRM_PROFILE = auto()
+    ERROR_MODAL = auto()
+    MAIN_MENU = auto()
+    HEROES_MODAL = auto()
+    TREASURE_HUNT_MAP = auto()
+    MAP_CLEARED = auto()
+    CAPTCHA = auto()
 
 
 class VisionEngine:
@@ -438,3 +454,112 @@ class VisionEngine:
                 }
             )
         return matches
+
+    def identify_screen(self, screen_gray=None):
+        """
+        Identifies the current game screen by inspecting template matches on screen.
+
+        Returns:
+            tuple: (GameScreen, dict of detected template match results)
+        """
+        if screen_gray is None:
+            screen_gray = self.capture_screen()
+
+        detected = {}
+
+        # 0. Captcha / Security check
+        for key in ["captcha_popup", "captcha_verify", "captcha_ok"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.CAPTCHA, detected
+
+        # 1. Error Modal check
+        for key in ["error_ok", "error_message", "unknown_error"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.ERROR_MODAL, detected
+
+        # 2. Login / MetaMask / Signature check
+        if "confirm_profile_ok" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["confirm_profile_ok"]
+        ):
+            match = self.find_template(
+                config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen_gray
+            )
+            if match:
+                detected["confirm_profile_ok"] = match
+                return GameScreen.CONFIRM_PROFILE, detected
+
+        if "metamask_sign" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["metamask_sign"]
+        ):
+            match = self.find_template(
+                config.TARGET_IMAGES["metamask_sign"], screen_gray=screen_gray
+            )
+            if match:
+                detected["metamask_sign"] = match
+                return GameScreen.METAMASK_SIGN, detected
+
+        if "select_metamask" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["select_metamask"]
+        ):
+            match = self.find_template(
+                config.TARGET_IMAGES["select_metamask"], screen_gray=screen_gray
+            )
+            if match:
+                detected["select_metamask"] = match
+                return GameScreen.METAMASK_SELECT, detected
+
+        if "connect_wallet" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["connect_wallet"]
+        ):
+            match = self.find_template(
+                config.TARGET_IMAGES["connect_wallet"], screen_gray=screen_gray
+            )
+            if match:
+                detected["connect_wallet"] = match
+                return GameScreen.LOGIN, detected
+
+        # 3. Map Cleared check
+        for key in ["map_complete_button", "map_complete"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.MAP_CLEARED, detected
+
+        # 4. Heroes Modal check
+        for key in ["work_all_button", "rest_all_button"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.HEROES_MODAL, detected
+
+        # 5. Main Menu check (Treasure Hunt icon/button)
+        for key in ["treasure_hunt_icon", "treasure_hunt_button"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.MAIN_MENU, detected
+
+        # 6. Treasure Hunt Map check (In-game)
+        for key in ["back_button", "bottom_arrow"]:
+            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+                if match:
+                    detected[key] = match
+        if detected:
+            return GameScreen.TREASURE_HUNT_MAP, detected
+
+        return GameScreen.UNKNOWN, detected

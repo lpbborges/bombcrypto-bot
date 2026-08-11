@@ -188,7 +188,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         """Tests that v10l mode locates and clicks the treasure hunt icon after refresh/login."""
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         mock_find.side_effect = lambda key, **k: (
-            {"x": 100, "y": 200, "confidence": 0.85} if "treasure_hunt_icon" in key else None
+            {"x": 100, "y": 200, "confidence": 0.85} if "treasure_hunt" in key else None
         )
 
         result = self.bot.enter_treasure_hunt()
@@ -398,6 +398,70 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.bot.run_cycle()
         mock_send_heroes.assert_not_called()
         self.assertEqual(self.bot.state, BotState.RESTING)
+
+    def test_determine_next_action_routing(self):
+        """Tests determine_next_action maps GameScreen types to appropriate actions."""
+        from modules.vision import GameScreen
+
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+
+        # 0. Captcha screen -> handle_captcha action
+        with patch.object(
+            self.bot.vision,
+            "identify_screen",
+            return_value=(GameScreen.CAPTCHA, {"captcha_popup": {}}),
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.CAPTCHA)
+            self.assertEqual(action, "handle_captcha")
+
+        # 1. Error screen -> handle_error action
+        with patch.object(
+            self.bot.vision,
+            "identify_screen",
+            return_value=(GameScreen.ERROR_MODAL, {"error_ok": {}}),
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.ERROR_MODAL)
+            self.assertEqual(action, "handle_error")
+
+        # 2. Login screen -> handle_login action
+        with patch.object(
+            self.bot.vision,
+            "identify_screen",
+            return_value=(GameScreen.LOGIN, {"connect_wallet": {}}),
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.LOGIN)
+            self.assertEqual(action, "handle_login")
+
+        # 3. Main Menu screen -> enter_treasure_hunt action
+        with patch.object(
+            self.bot.vision,
+            "identify_screen",
+            return_value=(GameScreen.MAIN_MENU, {"treasure_hunt_icon": {}}),
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.MAIN_MENU)
+            self.assertEqual(action, "enter_treasure_hunt")
+
+        # 4. Map Cleared screen -> handle_map_cleared action
+        with patch.object(
+            self.bot.vision,
+            "identify_screen",
+            return_value=(GameScreen.MAP_CLEARED, {"map_complete_button": {}}),
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.MAP_CLEARED)
+            self.assertEqual(action, "handle_map_cleared")
+
+        # 5. Unknown screen -> check_stuck_or_refresh action
+        with patch.object(
+            self.bot.vision, "identify_screen", return_value=(GameScreen.UNKNOWN, {})
+        ):
+            screen_type, action = self.bot.determine_next_action(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.UNKNOWN)
+            self.assertEqual(action, "check_stuck_or_refresh")
 
 
 if __name__ == "__main__":

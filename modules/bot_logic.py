@@ -6,7 +6,7 @@ from modules.actions import ActionEngine
 from modules.browser import BrowserManager
 from modules.logger import logger
 from modules.notifications import NotificationManager
-from modules.vision import VisionEngine
+from modules.vision import GameScreen, VisionEngine
 
 
 class BotState(Enum):
@@ -63,6 +63,60 @@ class BombCryptoBot:
             f"Errors Cleared: {self.errors_cleared_count} | "
             f"Stuck Recoveries: {self.stuck_recoveries_count}"
         )
+
+    def identify_current_screen(self, screen_gray=None):
+        """
+        Identifies the current game screen using VisionEngine template matching.
+
+        Returns:
+            tuple: (GameScreen, dict of matches)
+        """
+        screen_type, matches = self.vision.identify_screen(screen_gray=screen_gray)
+        logger.info(f"[BOT SCREEN] Identified screen: {screen_type.name}")
+        return screen_type, matches
+
+    def determine_next_action(self, screen_gray=None):
+        """
+        Identifies the current screen and determines the appropriate next action.
+
+        Returns:
+            tuple: (GameScreen, action_name: str)
+        """
+        screen_type, matches = self.identify_current_screen(screen_gray=screen_gray)
+
+        if screen_type == GameScreen.CAPTCHA:
+            return screen_type, "handle_captcha"
+        elif screen_type == GameScreen.ERROR_MODAL:
+            return screen_type, "handle_error"
+        elif screen_type in (
+            GameScreen.LOGIN,
+            GameScreen.METAMASK_SELECT,
+            GameScreen.METAMASK_SIGN,
+            GameScreen.CONFIRM_PROFILE,
+        ):
+            return screen_type, "handle_login"
+        elif screen_type == GameScreen.MAP_CLEARED:
+            return screen_type, "handle_map_cleared"
+        elif screen_type == GameScreen.MAIN_MENU:
+            return screen_type, "enter_treasure_hunt"
+        elif screen_type == GameScreen.HEROES_MODAL:
+            return screen_type, "process_heroes_modal"
+        elif screen_type == GameScreen.TREASURE_HUNT_MAP:
+            return screen_type, "in_game_monitoring"
+        else:
+            return GameScreen.UNKNOWN, "check_stuck_or_refresh"
+
+    def handle_captcha(self) -> bool:
+        """
+        Handles captcha / security verification popup by notifying user via Discord/Telegram/logs.
+        """
+        logger.warning("[BOT CAPTCHA ALERT] Captcha or security check popup detected!")
+        NotificationManager.send_notification(
+            "Bomb Crypto Bot - Captcha Alert",
+            "Captcha / Security verification detected on screen! Please solve it manually.",
+            level="warning",
+        )
+        return True
 
     def set_state(self, new_state: BotState):
         """Transitions bot state with logging."""
@@ -517,15 +571,36 @@ class BombCryptoBot:
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 3: Global Error & Disconnect scan
-        if self.check_errors_or_disconnect():
-            self.set_state(BotState.CHECKING_ERRORS)
+        # Step 3: Identify current screen to determine next action
+        screen_type, action_name = self.determine_next_action()
+        logger.info(f"[BOT DECISION] Screen: {screen_type.name} -> Next Action: {action_name}")
+
+        # Step 4: Execute action based on identified screen state
+        if action_name == "handle_captcha":
+            self.handle_captcha()
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 4: Check Login requirement
-        if self.handle_login():
+        if action_name == "handle_error":
+            self.set_state(BotState.CHECKING_ERRORS)
+            self.check_errors_or_disconnect()
+            logger.info("--- [BOT CYCLE END] ---")
+            return
+
+        if action_name == "handle_login":
             self.set_state(BotState.LOGGING_IN)
+            self.handle_login()
+            logger.info("--- [BOT CYCLE END] ---")
+            return
+
+        if action_name == "handle_map_cleared":
+            self.check_map_cleared()
+            logger.info("--- [BOT CYCLE END] ---")
+            return
+
+        if action_name == "enter_treasure_hunt":
+            if self.enter_treasure_hunt():
+                self.set_state(BotState.RESTING)
             logger.info("--- [BOT CYCLE END] ---")
             return
 
@@ -534,10 +609,21 @@ class BombCryptoBot:
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 6: Check Map Cleared requirement
-        if self.check_map_cleared():
-            logger.info("--- [BOT CYCLE END] ---")
-            return
+        # Step 6: Fallback scans if screen was UNKNOWN but specific elements might be present
+        if screen_type == GameScreen.UNKNOWN:
+            if self.check_errors_or_disconnect():
+                self.set_state(BotState.CHECKING_ERRORS)
+                logger.info("--- [BOT CYCLE END] ---")
+                return
+
+            if self.handle_login():
+                self.set_state(BotState.LOGGING_IN)
+                logger.info("--- [BOT CYCLE END] ---")
+                return
+
+            if self.check_map_cleared():
+                logger.info("--- [BOT CYCLE END] ---")
+                return
 
         # Step 7: FSM Work & Resting Cycle Logic
         only_error_refresh = getattr(config, "ONLY_REFRESH_ON_ERROR", False)

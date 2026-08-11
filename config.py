@@ -171,6 +171,9 @@ TARGET_IMAGES = {
     "unknown_error": os.path.join(TARGETS_DIR, "unknown_error.png"),
     "map_complete": os.path.join(TARGETS_DIR, "map_complete.png"),
     "map_complete_button": os.path.join(TARGETS_DIR, "map_complete_button.png"),
+    "captcha_popup": os.path.join(TARGETS_DIR, "captcha_popup.png"),
+    "captcha_verify": os.path.join(TARGETS_DIR, "captcha_verify.png"),
+    "captcha_ok": os.path.join(TARGETS_DIR, "captcha_ok.png"),
 }
 
 # Per-Target Vision Thresholds (Phase 2)
@@ -192,6 +195,9 @@ TARGET_THRESHOLDS = {
     "unknown_error": 0.70,
     "map_complete": 0.70,
     "map_complete_button": 0.70,
+    "captcha_popup": 0.70,
+    "captcha_verify": 0.70,
+    "captcha_ok": 0.75,
 }
 
 # Per-Target Regions of Interest (ROI) (Phase 2)

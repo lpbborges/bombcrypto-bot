@@ -212,6 +212,57 @@ class TestVisionEngine(unittest.TestCase):
             self.vision.capture_screen(force_refresh=True)
             self.assertFalse(any("Ubuntu on Xorg" in log for log in cm.output))
 
+    def test_identify_screen_various_states(self):
+        """Tests screen identification for various game screens."""
+        from modules.vision import GameScreen
+
+        dummy_screen = np.zeros((100, 100), dtype=np.uint8)
+
+        # Test Error Modal
+        with patch.object(self.vision, "find_template") as mock_find:
+            mock_find.side_effect = lambda key, **k: (
+                {"x": 10, "y": 10} if "error_ok" in key else None
+            )
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.ERROR_MODAL)
+
+        # Test Login Screen
+        with patch.object(self.vision, "find_template") as mock_find:
+            mock_find.side_effect = lambda key, **k: (
+                {"x": 10, "y": 10} if "connect_wallet" in key else None
+            )
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.LOGIN)
+
+        # Test Heroes Modal
+        with patch.object(self.vision, "find_template") as mock_find:
+            mock_find.side_effect = lambda key, **k: (
+                {"x": 10, "y": 10} if "work_all_button" in key else None
+            )
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.HEROES_MODAL)
+
+        # Test Main Menu
+        with patch.object(self.vision, "find_template") as mock_find:
+            mock_find.side_effect = lambda key, **k: (
+                {"x": 10, "y": 10} if "treasure_hunt" in key else None
+            )
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.MAIN_MENU)
+
+        # Test Map Cleared
+        with patch.object(self.vision, "find_template") as mock_find:
+            mock_find.side_effect = lambda key, **k: (
+                {"x": 10, "y": 10} if "map_complete_button" in key else None
+            )
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.MAP_CLEARED)
+
+        # Test Unknown Screen
+        with patch.object(self.vision, "find_template", return_value=None):
+            screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
+            self.assertEqual(screen_type, GameScreen.UNKNOWN)
+
 
 if __name__ == "__main__":
     unittest.main()
