@@ -64,10 +64,10 @@ MOUSE_CLICK_OFFSET = int(
     os.environ.get("MOUSE_CLICK_OFFSET", "5")
 )  # Random offset +/- pixels from center
 MIN_CLICK_DURATION = float(
-    os.environ.get("MIN_CLICK_DURATION", "0.2")
+    os.environ.get("MIN_CLICK_DURATION", "0.08")
 )  # Minimum mouse move time (seconds)
 MAX_CLICK_DURATION = float(
-    os.environ.get("MAX_CLICK_DURATION", "0.5")
+    os.environ.get("MAX_CLICK_DURATION", "0.20")
 )  # Maximum mouse move time (seconds)
 MIN_ACTION_DELAY = float(
     os.environ.get("MIN_ACTION_DELAY", "1.0")

@@ -152,36 +152,42 @@ def generate_bezier_curve(start, end, num_points=15):
 
 class ActionEngine:
     @staticmethod
-    def move_mouse_bezier(start_x, start_y, end_x, end_y, duration=0.2, steps=None):
+    def move_mouse_bezier(start_x, start_y, end_x, end_y, duration=None, steps=None):
         """
         Moves mouse along a cubic Bézier curve from (start_x, start_y) to (end_x, end_y).
         """
+        if duration is None:
+            min_dur = getattr(config, "MIN_CLICK_DURATION", 0.08)
+            max_dur = getattr(config, "MAX_CLICK_DURATION", 0.20)
+            duration = random.uniform(min_dur, max_dur)
+
         distance = math.hypot(end_x - start_x, end_y - start_y)
         if steps is None:
             min_steps = getattr(config, "BEZIER_MIN_STEPS", 5)
-            steps = max(min_steps, int(distance / 15))
+            steps = max(min_steps, int(distance / 25))
 
         points = generate_bezier_curve((start_x, start_y), (end_x, end_y), num_points=steps)
-        step_delay = max(0.001, duration / float(len(points)))
+        step_delay = max(0.0005, duration / float(len(points)))
 
         scale = get_hyprland_scale() if HAS_HYPRCTL else 1.0
         for pt_x, pt_y in points:
-            if HAS_HYPRCTL:
-                try:
-                    logic_x = int(pt_x / scale)
-                    logic_y = int(pt_y / scale)
-                    subprocess.run(
-                        ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                except Exception:
-                    pass
             try:
                 pyautogui.moveTo(pt_x, pt_y)
             except Exception:
                 pass
             time.sleep(step_delay)
+
+        if HAS_HYPRCTL:
+            try:
+                logic_x = int(end_x / scale)
+                logic_y = int(end_y / scale)
+                subprocess.run(
+                    ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
 
     @staticmethod
     def human_delay(
@@ -234,7 +240,7 @@ class ActionEngine:
             )
             return target_x, target_y
 
-        ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.15)
+        ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.10)
         return target_x, target_y
 
     @staticmethod
@@ -268,7 +274,7 @@ class ActionEngine:
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-                    time.sleep(0.15)
+                    time.sleep(0.05)
                 except Exception:
                     pass
 
@@ -282,7 +288,7 @@ class ActionEngine:
             try:
                 UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
                 UINPUT_MOUSE.syn()
-                time.sleep(0.10)
+                time.sleep(0.04)
                 UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
                 logger.info(
@@ -330,7 +336,7 @@ class ActionEngine:
         # 4. Fallback to PyAutoGUI click
         try:
             pyautogui.mouseDown(button="left")
-            time.sleep(0.10)
+            time.sleep(0.04)
             pyautogui.mouseUp(button="left")
             logger.info(f"[ACTION] Moved cursor to physical ({target_x}, {target_y}) and clicked.")
         except Exception as err:
