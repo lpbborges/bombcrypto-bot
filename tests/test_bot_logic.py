@@ -19,6 +19,18 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertEqual(format_duration(65.5), "01:05:500")
         self.assertEqual(format_duration(3665.123), "01:01:05:123")
 
+    def test_env_config_hero_work_interval(self):
+        """Tests environment variable loading for HERO_WORK_INTERVAL_MINUTES."""
+        import importlib
+        import os
+
+        with patch.dict(os.environ, {"HERO_WORK_INTERVAL_MINUTES": "45.5"}):
+            importlib.reload(config)
+            self.assertEqual(config.HERO_WORK_INTERVAL_MINUTES, 45.5)
+
+        # Restore default
+        importlib.reload(config)
+
     def test_initial_state(self):
         """Tests default initialization state and parameters."""
         self.assertEqual(self.bot.state, BotState.INITIALIZING)

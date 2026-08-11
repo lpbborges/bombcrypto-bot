@@ -5,6 +5,21 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGETS_DIR = os.path.join(BASE_DIR, "targets")
 DEBUG_DIR = os.path.join(BASE_DIR, "debug")
 
+# Load environment variables from .env file if available
+env_file = os.path.join(BASE_DIR, ".env")
+if os.path.exists(env_file):
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        load_dotenv(env_file)
+    except ImportError:
+        with open(env_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), val.strip().strip("'\""))
+
 # Ensure debug directory exists
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
@@ -46,14 +61,26 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# Bot Logic Timers (in seconds)
-HERO_WORK_INTERVAL_MINUTES = 30  # Time to sleep while heroes mine / recover stamina
-ERROR_CHECK_INTERVAL_SECONDS = 15  # Frequency to scan for game errors/disconnects
-MAX_STUCK_TIMEOUT_MINUTES = 10  # Refresh page if stuck in same screen state
+# Bot Logic Timers
+HERO_WORK_INTERVAL_MINUTES = float(
+    os.environ.get("HERO_WORK_INTERVAL_MINUTES", "30")
+)  # Time to sleep while heroes mine / recover stamina
+ERROR_CHECK_INTERVAL_SECONDS = float(
+    os.environ.get("ERROR_CHECK_INTERVAL_SECONDS", "15")
+)  # Frequency to scan for game errors/disconnects
+MAX_STUCK_TIMEOUT_MINUTES = float(
+    os.environ.get("MAX_STUCK_TIMEOUT_MINUTES", "10")
+)  # Refresh page if stuck in same screen state
 
 # Inner Bot & Refresh Options (For game's native inner bot)
-ONLY_REFRESH_ON_ERROR = False  # When True, only refreshes page when error/disconnect popups are found
-REFRESH_INTERVAL_MINUTES = 0.0  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
+ONLY_REFRESH_ON_ERROR = os.environ.get("ONLY_REFRESH_ON_ERROR", "").lower() in (
+    "true",
+    "1",
+    "yes",
+)  # When True, only refreshes page when error/disconnect popups are found
+REFRESH_INTERVAL_MINUTES = float(
+    os.environ.get("REFRESH_INTERVAL_MINUTES", "0.0")
+)  # Periodic page refresh interval in minutes to unstuck heroes (0.0 = disabled)
 ENABLE_HERO_WORK_ACTIONS = True  # Enable manual hero work clicking in hero menu (set to False when using inner bot)
 
 # Target Image Filenames

@@ -31,6 +31,21 @@ class TestVisionEngine(unittest.TestCase):
         self.vision.clear_cache()
         self.assertIsNone(self.vision._cached_screen)
 
+    def test_template_caching_and_invalidation(self):
+        """Tests template image caching and clear_template_cache behavior."""
+        template_path = os.path.join(self.temp_dir, "cached_template.png")
+        dummy_img = np.ones((20, 20), dtype=np.uint8) * 200
+        cv2.imwrite(template_path, dummy_img)
+
+        # First load should read from disk and store in cache
+        loaded = self.vision._load_template(template_path)
+        self.assertIsNotNone(loaded)
+        self.assertIn(template_path, self.vision._template_cache)
+
+        # Invalidation
+        self.vision.clear_template_cache()
+        self.assertEqual(len(self.vision._template_cache), 0)
+
     def test_find_template_exact_match(self):
         """Tests multi-scale template matching with a synthetic generated image."""
         # Create 200x200 canvas

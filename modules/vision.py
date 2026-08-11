@@ -16,7 +16,8 @@ class VisionEngine:
     def __init__(self, monitor_index=config.SCREENSHOT_MONITOR_INDEX):
         self.monitor_index = monitor_index
         try:
-            self.sct = mss.mss()
+            mss_factory = getattr(mss, "MSS", mss.mss)
+            self.sct = mss_factory()
         except Exception as e:
             logger.warning(
                 f"[VISION] Could not initialize mss screen capture connection ({e}). Display may be missing."
@@ -24,6 +25,7 @@ class VisionEngine:
             self.sct = None
         self.use_wayland_grim = self._check_wayland_grim()
         self._cached_screen = None
+        self._template_cache = {}
         if self.use_wayland_grim:
             logger.info(
                 "[VISION] Wayland environment detected. Using 'grim' for native screen capture."
@@ -39,6 +41,21 @@ class VisionEngine:
     def clear_cache(self):
         """Invalidates the cached screen frame so the next capture will grab a fresh frame."""
         self._cached_screen = None
+
+    def clear_template_cache(self):
+        """Clears cached template images."""
+        self._template_cache.clear()
+
+    def _load_template(self, template_path):
+        """Loads and caches a grayscale template image."""
+        if not template_path or not os.path.exists(template_path):
+            return None
+        if template_path in self._template_cache:
+            return self._template_cache[template_path]
+        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        if template is not None:
+            self._template_cache[template_path] = template
+        return template
 
     def capture_screen(self, force_refresh=False):
         """
@@ -70,7 +87,8 @@ class VisionEngine:
         if gray_img is None:
             if self.sct is None:
                 try:
-                    self.sct = mss.mss()
+                    mss_factory = getattr(mss, "MSS", mss.mss)
+                    self.sct = mss_factory()
                 except Exception:
                     pass
             if self.sct is not None:
@@ -186,7 +204,7 @@ class VisionEngine:
         if screen_gray is None:
             screen_gray = self.capture_screen()
 
-        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        template = self._load_template(template_path)
         if template is None:
             return None
 
@@ -246,7 +264,7 @@ class VisionEngine:
         if screen_gray is None:
             screen_gray = self.capture_screen()
 
-        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        template = self._load_template(template_path)
         if template is None:
             return []
 

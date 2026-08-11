@@ -66,6 +66,12 @@ def parse_args():
         action="store_true",
         help="Enable detailed debug-level logging",
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="Bomb Crypto Bot v2.1.0",
+        help="Show bot version number and exit",
+    )
     return parser.parse_args()
 
 
