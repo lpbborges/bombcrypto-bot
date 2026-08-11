@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
@@ -144,6 +144,42 @@ class TestVisionEngine(unittest.TestCase):
         self.assertEqual(config.get_target_threshold("confirm_profile_ok"), 0.75)
         self.assertEqual(config.get_target_roi("bottom_arrow"), (0.60, 0.0, 1.0, 1.0))
         self.assertIsNone(config.get_target_roi("non_existent_target"))
+
+    def test_capture_screen_mss_xprotoerror_fallback(self):
+        """Tests that X11 Protocol Error during mss grab is caught and falls back safely without crashing."""
+        self.vision.use_wayland_grim = False
+        mock_sct = MagicMock()
+        mock_sct.monitors = [{"top": 0, "left": 0, "width": 1920, "height": 1080}]
+        mock_sct.grab.side_effect = Exception("X11 Protocol Error: X Error of failed request: 8")
+        self.vision.sct = mock_sct
+
+        with (
+            patch("shutil.which", return_value=None),
+            patch.object(
+                self.vision,
+                "_capture_via_pil_imagegrab",
+                return_value=np.ones((100, 100), dtype=np.uint8) * 50,
+            ),
+        ):
+            screen = self.vision.capture_screen(force_refresh=True)
+            self.assertIsNotNone(screen)
+            self.assertEqual(screen.shape, (100, 100))
+            self.assertEqual(screen[0, 0], 50)
+
+    def test_capture_screen_monitor_index_out_of_bounds(self):
+        """Tests that invalid monitor_index falls back gracefully to available monitors."""
+        self.vision.monitor_index = 99  # Invalid monitor index
+        mock_sct = MagicMock()
+        mock_sct.monitors = [
+            {"top": 0, "left": 0, "width": 1920, "height": 1080}
+        ]  # Only 1 monitor (index 0)
+        dummy_bgra = np.ones((100, 100, 4), dtype=np.uint8) * 200
+        mock_sct.grab.return_value = dummy_bgra
+        self.vision.sct = mock_sct
+
+        img = self.vision._capture_via_mss()
+        self.assertIsNotNone(img)
+        mock_sct.grab.assert_called_once_with(mock_sct.monitors[0])
 
 
 if __name__ == "__main__":

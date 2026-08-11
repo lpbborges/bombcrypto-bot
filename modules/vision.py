@@ -2,6 +2,7 @@ import io
 import os
 import shutil
 import subprocess
+import tempfile
 
 import cv2
 import mss
@@ -57,51 +58,167 @@ class VisionEngine:
             self._template_cache[template_path] = template
         return template
 
+    def _capture_via_grim(self):
+        """Captures screen using native Wayland tool 'grim'."""
+        try:
+            proc = subprocess.Popen(
+                ["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+            )
+            stdout, _ = proc.communicate()
+            if stdout:
+                img = Image.open(io.BytesIO(stdout))
+                img_np = np.array(img)
+                if img_np.ndim == 3:
+                    if img_np.shape[2] == 4:
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
+                    elif img_np.shape[2] == 3:
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                return img_np
+        except Exception as e:
+            logger.warning(f"[VISION] grim screen capture failed: {e}")
+        return None
+
+    def _capture_via_mss(self):
+        """Attempts screen capture using mss with monitor bounds checking and error handling."""
+        if self.sct is None:
+            try:
+                mss_factory = getattr(mss, "MSS", mss.mss)
+                self.sct = mss_factory()
+            except Exception as e:
+                logger.warning(
+                    f"[VISION] Could not initialize mss screen capture connection ({e})."
+                )
+                return None
+
+        if self.sct is None:
+            return None
+
+        try:
+            monitors = getattr(self.sct, "monitors", [])
+        except Exception as e:
+            logger.warning(f"[VISION] Failed to access mss monitors: {e}")
+            return None
+
+        if not monitors:
+            return None
+
+        num_monitors = len(monitors)
+        monitors_to_try = []
+
+        # Target requested monitor index first if valid
+        if 0 <= self.monitor_index < num_monitors:
+            monitors_to_try.append(self.monitor_index)
+
+        # Fallback monitor indices: 0 (all combined) and 1 (primary)
+        for idx in [0, 1]:
+            if idx < num_monitors and idx not in monitors_to_try:
+                monitors_to_try.append(idx)
+
+        for idx in monitors_to_try:
+            try:
+                monitor = monitors[idx]
+                sct_img = self.sct.grab(monitor)
+                img_np = np.array(sct_img)
+
+                # Check if mss returned pure black screen (Wayland X11 restriction)
+                if img_np.max() == 0 and shutil.which("grim"):
+                    logger.warning(
+                        "[VISION] mss returned black screenshot (Wayland X11 restriction). Enabling grim."
+                    )
+                    self.use_wayland_grim = True
+                    return None
+
+                if img_np.size > 0:
+                    return cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
+            except Exception as e:
+                logger.warning(
+                    f"[VISION] mss grab failed for monitor index {idx} ({type(e).__name__}: {e})."
+                )
+
+        return None
+
+    def _capture_via_pil_imagegrab(self):
+        """Attempts screen capture using PIL ImageGrab."""
+        try:
+            from PIL import ImageGrab
+
+            pil_img = ImageGrab.grab()
+            if pil_img is not None:
+                img_np = np.array(pil_img)
+                if img_np.ndim == 3:
+                    if img_np.shape[2] == 4:
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
+                    elif img_np.shape[2] == 3:
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                return img_np
+        except Exception as e:
+            logger.warning(f"[VISION] PIL ImageGrab screen capture failed: {e}")
+        return None
+
+    def _capture_via_cli_utils(self):
+        """Attempts screen capture using CLI utilities like gnome-screenshot or scrot."""
+        for tool, cmd in [
+            ("gnome-screenshot", ["gnome-screenshot", "-f"]),
+            ("scrot", ["scrot"]),
+        ]:
+            if shutil.which(tool):
+                tmp_path = os.path.join(tempfile.gettempdir(), f"bot_screen_{tool}.png")
+                try:
+                    res = subprocess.run(cmd + [tmp_path], capture_output=True, timeout=5)
+                    if res.returncode == 0 and os.path.exists(tmp_path):
+                        img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
+                        try:
+                            os.remove(tmp_path)
+                        except Exception:
+                            pass
+                        if img_np is not None and img_np.size > 0:
+                            return img_np
+                except Exception as e:
+                    logger.warning(f"[VISION] CLI screenshot tool '{tool}' failed: {e}")
+        return None
+
     def capture_screen(self, force_refresh=False):
         """
         Captures the screen and returns a grayscale numpy array.
-        Supports Wayland (grim) and X11 (mss). Saves debug_last_screen.png.
+        Supports Wayland (grim), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
+        Saves debug_last_screen.png.
         """
         if not force_refresh and self._cached_screen is not None:
             return self._cached_screen
 
         gray_img = None
-        if self.use_wayland_grim:
-            try:
-                proc = subprocess.Popen(
-                    ["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-                )
-                stdout, _ = proc.communicate()
-                img = Image.open(io.BytesIO(stdout))
-                img_np = np.array(img)
-                if img_np.ndim == 3:
-                    if img_np.shape[2] == 4:
-                        gray_img = cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
-                    elif img_np.shape[2] == 3:
-                        gray_img = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                else:
-                    gray_img = img_np
-            except Exception as e:
-                logger.warning(f"[VISION] grim screen capture failed: {e}. Falling back to mss.")
 
+        # 1. Primary Wayland capture via grim if enabled
+        if self.use_wayland_grim:
+            gray_img = self._capture_via_grim()
+
+        # 2. Capture via MSS (X11 / Xwayland) with error and bounds handling
         if gray_img is None:
-            if self.sct is None:
-                try:
-                    mss_factory = getattr(mss, "MSS", mss.mss)
-                    self.sct = mss_factory()
-                except Exception:
-                    pass
-            if self.sct is not None:
-                monitor = self.sct.monitors[self.monitor_index]
-                sct_img = self.sct.grab(monitor)
-                img_np = np.array(sct_img)
-                # Check if mss returned pure black screen (Wayland X11 restriction)
-                if img_np.max() == 0 and shutil.which("grim"):
-                    self.use_wayland_grim = True
-                    return self.capture_screen(force_refresh=True)
-                gray_img = cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
-            else:
-                gray_img = np.zeros((1080, 1920), dtype=np.uint8)
+            try:
+                gray_img = self._capture_via_mss()
+            except Exception as e:
+                logger.warning(f"[VISION] _capture_via_mss error: {e}")
+
+        # 3. Fallback to grim if mss failed and grim exists
+        if gray_img is None and shutil.which("grim"):
+            gray_img = self._capture_via_grim()
+
+        # 4. Fallback to PIL ImageGrab
+        if gray_img is None:
+            gray_img = self._capture_via_pil_imagegrab()
+
+        # 5. Fallback to CLI screenshot tools (gnome-screenshot, scrot)
+        if gray_img is None:
+            gray_img = self._capture_via_cli_utils()
+
+        # 6. Fallback if all screen capture methods failed
+        if gray_img is None:
+            logger.error(
+                "[VISION] All screen capture methods failed. "
+                "If running on Ubuntu (Wayland), install 'grim' using `sudo apt install grim` "
+                "or set SCREENSHOT_MONITOR_INDEX = 0 in config.py / .env."
+            )
+            gray_img = np.zeros((1080, 1920), dtype=np.uint8)
 
         self._cached_screen = gray_img
 
