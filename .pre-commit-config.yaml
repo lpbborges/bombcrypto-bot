@@ -1,0 +1,8 @@
+# pre-commit configuration file
+# See https://pre-commit.com for details
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff-format
+      - id: ruff

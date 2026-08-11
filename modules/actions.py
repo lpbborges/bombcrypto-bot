@@ -43,6 +43,7 @@ import config
 try:
     from evdev import ecodes as e
 except Exception:
+
     class DummyEcodes:
         EV_KEY = 1
         BTN_LEFT = 272

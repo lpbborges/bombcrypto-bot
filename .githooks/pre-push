@@ -1,0 +1,27 @@
+#!/bin/sh
+# Git pre-push hook to run pytest before pushing to remote repository.
+
+echo "Running pytest suite before push..."
+
+# Determine pytest binary (check venv first, then system PATH)
+if [ -f "venv/bin/pytest" ]; then
+    PYTEST="venv/bin/pytest"
+elif command -v pytest >/dev/null 2>&1; then
+    PYTEST="pytest"
+else
+    echo "Error: pytest not found in venv/bin/pytest or system PATH."
+    echo "Please install dependencies: pip install -r requirements-dev.txt"
+    exit 1
+fi
+
+# Execute pytest suite
+$PYTEST
+TEST_STATUS=$?
+
+if [ $TEST_STATUS -ne 0 ]; then
+    echo "Error: Tests failed! Push aborted."
+    exit 1
+fi
+
+echo "All tests passed. Proceeding with push."
+exit 0
