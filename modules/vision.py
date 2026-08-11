@@ -59,6 +59,7 @@ class VisionEngine:
     def clear_cache(self):
         """Invalidates the cached screen frame so the next capture will grab a fresh frame."""
         self._cached_screen = None
+        self._cached_screen_color = None
 
     def clear_template_cache(self):
         """Clears cached template images."""
@@ -90,6 +91,19 @@ class VisionEngine:
                 )
         except Exception as e:
             logger.warning(f"[VISION] grim screen capture failed: {e}")
+        return None
+
+    def _capture_via_grim_color(self):
+        """Captures screen as BGR color using 'grim'."""
+        try:
+            proc = subprocess.Popen(["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            if proc.returncode == 0 and stdout:
+                img = Image.open(io.BytesIO(stdout)).convert("RGB")
+                img_np = np.array(img)
+                return cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        except Exception:
+            pass
         return None
 
     def _capture_via_mac_screencapture(self):
@@ -274,6 +288,41 @@ class VisionEngine:
             cv2.imwrite(debug_path, gray_img)
 
         return gray_img
+
+    def capture_screen_color(self, force_refresh=False):
+        """
+        Captures the screen and returns a BGR color numpy array.
+        Used for color-sensitive checks like stamina bar HSV color analysis.
+        """
+        if not force_refresh and getattr(self, "_cached_screen_color", None) is not None:
+            return self._cached_screen_color
+
+        bgr_img = None
+        if self.use_wayland_grim:
+            bgr_img = self._capture_via_grim_color()
+
+        if bgr_img is None:
+            try:
+                from PIL import ImageGrab
+
+                pil_img = ImageGrab.grab()
+                if pil_img is not None:
+                    img_np = np.array(pil_img)
+                    if img_np.ndim == 3:
+                        if img_np.shape[2] == 4:
+                            bgr_img = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
+                        elif img_np.shape[2] == 3:
+                            bgr_img = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            except Exception:
+                pass
+
+        if bgr_img is None:
+            # Fallback to grayscale converted to BGR
+            gray = self.capture_screen(force_refresh=force_refresh)
+            bgr_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+        self._cached_screen_color = bgr_img
+        return bgr_img
 
     def save_debug_match(self, template_name, match_result, screen_gray=None):
         """

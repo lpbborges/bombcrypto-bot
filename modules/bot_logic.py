@@ -468,7 +468,13 @@ class BombCryptoBot:
                 total_sent = 0
 
                 for scroll_pass in range(max_scroll_passes):
-                    work_all_screen = self.vision.capture_screen(force_refresh=True)
+                    work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
+                    if work_all_screen_color.ndim == 3:
+                        import cv2
+
+                        work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
+                    else:
+                        work_all_screen = work_all_screen_color
 
                     # 1. Locate all green WORK buttons on current modal screen
                     work_buttons_raw = []
@@ -489,7 +495,7 @@ class BombCryptoBot:
                     for target_path, pct in stamina_targets:
                         if os.path.exists(target_path):
                             matches = self.vision.find_all_templates(
-                                target_path, screen_gray=work_all_screen, threshold=0.70
+                                target_path, screen_gray=work_all_screen, threshold=0.82
                             )
                             stamina_raw.extend(matches)
 
@@ -523,13 +529,15 @@ class BombCryptoBot:
                             crop_xmin = max(0, w_x - 180)
                             crop_xmax = max(0, w_x - 45)
                             crop_ymin = max(0, w_y - 18)
-                            crop_ymax = min(work_all_screen.shape[0], w_y + 18)
+                            crop_ymax = min(work_all_screen_color.shape[0], w_y + 18)
 
-                            stamina_crop = work_all_screen[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
+                            stamina_crop = work_all_screen_color[
+                                crop_ymin:crop_ymax, crop_xmin:crop_xmax
+                            ]
                             fill_pct = calculate_stamina_percentage(stamina_crop)
 
-                            # Hero is eligible if visual fill >= (min_stamina - 5%) OR a high-confidence template match (>= 0.70) exists
-                            if fill_pct >= (min_stamina - 5.0) or has_bar_match:
+                            # Hero is eligible if HSV green fill >= (min_stamina - 2.0%) OR high-confidence template match exists
+                            if fill_pct >= (min_stamina - 2.0) or has_bar_match:
                                 eligible_clicks.append((w_x, w_y))
 
                     # Method B: Fallback if work_button template didn't match
