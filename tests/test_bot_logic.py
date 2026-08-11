@@ -111,31 +111,17 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_click.assert_called_once()
 
     @patch("modules.vision.VisionEngine.find_template")
-    @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine.click_match")
-    def test_check_errors_error_ok_button(self, mock_click, mock_capture, mock_find):
-        """Tests handling error_ok_button when detected on screen."""
-        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
-        mock_find.side_effect = lambda key, **k: (
-            {"x": 50, "y": 50, "confidence": 0.9} if "error_ok_button" in key else None
-        )
-
-        handled = self.bot.check_errors_or_disconnect()
-        self.assertTrue(handled)
-        mock_click.assert_called_once()
-
-    @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.actions.ActionEngine.refresh_page")
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.actions.ActionEngine.click_match")
     def test_check_errors_error_message_with_ok(
         self, mock_click, mock_capture, mock_refresh, mock_find
     ):
-        """Tests error_message detected with error_ok_button present on screen."""
+        """Tests error_message detected with error_ok present on screen."""
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
 
         def side_effect(key, **k):
-            if "error_message" in key or "error_ok_button" in key:
+            if "error_message" in key or "error_ok" in key:
                 return {"x": 50, "y": 50, "confidence": 0.9}
             return None
 
@@ -373,6 +359,31 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         refreshed = self.bot.check_periodic_refresh()
         self.assertTrue(refreshed)
         mock_refresh.assert_called_once()
+        self.assertEqual(self.bot.state, BotState.INITIALIZING)
+
+    @patch.object(config, "GAME_VERSION", "v10l")
+    @patch.object(config, "DIRECT_LANDING_MODE", False)
+    @patch.object(config, "REFRESH_INTERVAL_MINUTES", 15.0)
+    @patch("modules.vision.VisionEngine.find_template")
+    @patch("modules.vision.VisionEngine.capture_screen")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
+    def test_check_periodic_refresh_v10l(
+        self, mock_delay, mock_click_match, mock_capture, mock_find
+    ):
+        """Tests v10l periodic refresh clicks back button and re-enters treasure hunt."""
+        mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
+
+        def side_effect(key, **kwargs):
+            if "back_button" in key or "treasure_hunt" in key:
+                return {"x": 20, "y": 20, "confidence": 0.9}
+            return None
+
+        mock_find.side_effect = side_effect
+        self.bot.last_periodic_refresh_time = time.time() - (15 * 60 + 10)
+        refreshed = self.bot.check_periodic_refresh()
+        self.assertTrue(refreshed)
+        self.assertEqual(mock_click_match.call_count, 2)
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
 
     @patch.object(config, "ONLY_REFRESH_ON_ERROR", True)

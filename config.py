@@ -159,10 +159,14 @@ TARGET_IMAGES = {
     "work_all_button": os.path.join(TARGETS_DIR, "work_all_button.png"),
     "rest_all_button": os.path.join(TARGETS_DIR, "rest_all_button.png"),
     "close_button": os.path.join(TARGETS_DIR, "close_button.png"),
-    "treasure_hunt_icon": os.path.join(TARGETS_DIR, "treasure_hunt_icon.png"),
+    "treasure_hunt_icon": (
+        os.path.join(TARGETS_DIR, "treasure_hunt_button.png")
+        if os.path.exists(os.path.join(TARGETS_DIR, "treasure_hunt_button.png"))
+        else os.path.join(TARGETS_DIR, "treasure_hunt_icon.png")
+    ),
+    "treasure_hunt_button": os.path.join(TARGETS_DIR, "treasure_hunt_button.png"),
     "back_button": os.path.join(TARGETS_DIR, "back_button.png"),
     "error_ok": os.path.join(TARGETS_DIR, "error_ok.png"),
-    "error_ok_button": os.path.join(TARGETS_DIR, "error_ok_button.png"),
     "error_message": os.path.join(TARGETS_DIR, "error_message.png"),
     "unknown_error": os.path.join(TARGETS_DIR, "unknown_error.png"),
     "map_complete": os.path.join(TARGETS_DIR, "map_complete.png"),
@@ -181,9 +185,9 @@ TARGET_THRESHOLDS = {
     "rest_all_button": 0.75,
     "close_button": 0.70,
     "treasure_hunt_icon": 0.70,
+    "treasure_hunt_button": 0.70,
     "back_button": 0.70,
     "error_ok": 0.75,
-    "error_ok_button": 0.75,
     "error_message": 0.70,
     "unknown_error": 0.70,
     "map_complete": 0.70,

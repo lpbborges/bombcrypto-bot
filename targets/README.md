@@ -14,7 +14,9 @@ Save your small screen crops (PNG format) inside this `targets/` folder accordin
 | `heroes_button.png` | Crop of the **Heroes Icon** inside the opened bottom HUD menu. |
 | `work_all_button.png` | Crop of the green **"Work All"** button inside the Heroes list modal. |
 | `close_button.png` | Crop of the red **"X" / Close** button on top of the Heroes modal window. |
-| `error_ok.png` / `error_ok_button.png` | Crop of the **"OK"** button on error or disconnection dialog popups. |
+| `back_button.png` | Crop of the **Back Arrow** button on the top-left of the map screen. |
+| `treasure_hunt_button.png` / `treasure_hunt_icon.png` | Crop of the **Treasure Hunt** icon/button on the main menu. |
+| `error_ok.png` | Crop of the **"OK"** button on error or disconnection dialog popups. |
 | `unknown_error.png` / `error_message.png` | Crop of the error message box or title text on connection error popups. |
 
 ## Execution Workflow

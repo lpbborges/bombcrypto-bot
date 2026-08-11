@@ -121,7 +121,7 @@ class BombCryptoBot:
     def check_periodic_refresh(self) -> bool:
         """
         Checks if the configured periodic page refresh interval has elapsed.
-        Refreshes browser page to prevent/recover stuck heroes when inner bot is active.
+        Refreshes browser page (or exits to menu & re-enters map on v10l) to prevent/recover stuck heroes when inner bot is active.
         """
         interval_mins = getattr(config, "REFRESH_INTERVAL_MINUTES", 0.0)
         if interval_mins <= 0:
@@ -133,15 +133,38 @@ class BombCryptoBot:
         if elapsed_seconds >= interval_seconds:
             elapsed_str = format_duration(elapsed_seconds)
             logger.info(
-                f"[BOT REFRESH] Periodic refresh interval reached ({elapsed_str} elapsed / {interval_mins:.1f} min threshold). "
-                f"Refreshing browser page to unstuck heroes..."
+                f"[BOT REFRESH] Periodic refresh interval reached ({elapsed_str} elapsed / {interval_mins:.1f} min threshold)."
             )
             NotificationManager.send_notification(
                 "Bomb Crypto Bot Periodic Refresh",
                 f"Refreshing page after {interval_mins:.1f}m interval to unstuck heroes.",
                 level="info",
             )
-            ActionEngine.refresh_page()
+
+            game_ver = getattr(config, "GAME_VERSION", "v13d").lower()
+            if game_ver == "v10l":
+                logger.info("[BOT REFRESH] Executing v10l refresh...")
+                screen = self.vision.capture_screen()
+                back_match = self.vision.find_template(
+                    config.TARGET_IMAGES["back_button"], screen_gray=screen
+                )
+                if back_match:
+                    logger.info(
+                        f"[BOT REFRESH] Back button detected (Confidence: {back_match['confidence']:.2f}). Clicking back button..."
+                    )
+                    ActionEngine.click_match(back_match)
+                    self.vision.clear_cache()
+                    ActionEngine.human_delay(2.0, 4.0)
+
+                entered = self.enter_treasure_hunt()
+                if not back_match and not entered:
+                    logger.info(
+                        "[BOT REFRESH] Neither back button nor Treasure Hunt button found. Refreshing browser page..."
+                    )
+                    ActionEngine.refresh_page()
+            else:
+                ActionEngine.refresh_page()
+
             self.vision.clear_cache()
             self.update_progress()
             self.last_periodic_refresh_time = time.time()
@@ -153,16 +176,14 @@ class BombCryptoBot:
     def check_errors_or_disconnect(self) -> bool:
         """
         Scans for common game error modals (error_message/unknown_error)
-        or error OK buttons (error_ok_button/error_ok).
+        or error OK button (error_ok).
         Returns True if an error was handled or page refreshed.
         """
         logger.info("[BOT] Scanning for error popups or disconnects...")
         screen = self.vision.capture_screen()
 
-        # Check for 'OK' error button (checking error_ok_button first, then error_ok)
-        ok_match = self.vision.find_template(
-            config.TARGET_IMAGES["error_ok_button"], screen_gray=screen
-        ) or self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+        # Check for 'OK' error button (error_ok)
+        ok_match = self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
 
         if ok_match:
             logger.info(
@@ -187,8 +208,8 @@ class BombCryptoBot:
             self.errors_cleared_count += 1
             # Try to see if an OK button is present to dismiss the error message modal
             ok_match = self.vision.find_template(
-                config.TARGET_IMAGES["error_ok_button"], screen_gray=screen
-            ) or self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+                config.TARGET_IMAGES["error_ok"], screen_gray=screen
+            )
 
             if ok_match:
                 logger.info("[BOT] Found OK button for error message. Clicking OK...")
@@ -407,6 +428,11 @@ class BombCryptoBot:
         th_match = self.vision.find_template(
             config.TARGET_IMAGES["treasure_hunt_icon"], screen_gray=screen
         )
+        if not th_match and "treasure_hunt_button" in config.TARGET_IMAGES:
+            th_match = self.vision.find_template(
+                config.TARGET_IMAGES["treasure_hunt_button"], screen_gray=screen
+            )
+
         if th_match:
             logger.info(
                 f"[BOT] Found Treasure Hunt map icon (Confidence: {th_match['confidence']:.2f}). Clicking to enter map..."
