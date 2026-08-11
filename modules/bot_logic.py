@@ -43,13 +43,13 @@ def calculate_stamina_percentage(stamina_crop):
         import cv2
 
         hsv = cv2.cvtColor(stamina_crop, cv2.COLOR_BGR2HSV)
-        green_mask = cv2.inRange(hsv, (35, 60, 60), (85, 255, 255))
+        green_mask = cv2.inRange(hsv, (35, 70, 70), (85, 255, 255))
         col_has_green = np.sum(green_mask, axis=0) > 0
         return (np.sum(col_has_green) / stamina_crop.shape[1]) * 100.0
     else:
-        # Grayscale array: stamina fill region (intensity 90-220)
-        bright_mask = (stamina_crop >= 90) & (stamina_crop <= 220)
-        col_has_bar = np.sum(bright_mask, axis=0) >= (stamina_crop.shape[0] * 0.2)
+        # Grayscale array: green bar fill region (intensity 100-210)
+        bright_mask = (stamina_crop >= 100) & (stamina_crop <= 210)
+        col_has_bar = np.sum(bright_mask, axis=0) >= (stamina_crop.shape[0] * 0.35)
         return (np.sum(col_has_bar) / stamina_crop.shape[1]) * 100.0
 
 
@@ -489,7 +489,7 @@ class BombCryptoBot:
                     for target_path, pct in stamina_targets:
                         if os.path.exists(target_path):
                             matches = self.vision.find_all_templates(
-                                target_path, screen_gray=work_all_screen, threshold=0.55
+                                target_path, screen_gray=work_all_screen, threshold=0.70
                             )
                             stamina_raw.extend(matches)
 
@@ -513,22 +513,23 @@ class BombCryptoBot:
                         for w_btn in work_button_matches:
                             w_x, w_y = w_btn["x"], w_btn["y"]
 
-                            # Check if template match >= min_stamina exists on same row
+                            # Check if high-confidence template match >= min_stamina exists on same row
                             has_bar_match = any(
                                 abs(s_m["y"] - w_y) <= 25 and s_m["x"] < w_x
                                 for s_m in stamina_matches
                             )
 
-                            # Crop stamina bar region to the left of WORK button
-                            crop_xmin = max(0, w_x - 220)
-                            crop_xmax = max(0, w_x - 15)
-                            crop_ymin = max(0, w_y - 20)
-                            crop_ymax = min(work_all_screen.shape[0], w_y + 20)
+                            # Exact stamina bar crop relative to WORK button center (w_x, w_y)
+                            crop_xmin = max(0, w_x - 180)
+                            crop_xmax = max(0, w_x - 45)
+                            crop_ymin = max(0, w_y - 18)
+                            crop_ymax = min(work_all_screen.shape[0], w_y + 18)
 
                             stamina_crop = work_all_screen[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
                             fill_pct = calculate_stamina_percentage(stamina_crop)
 
-                            if has_bar_match or fill_pct >= (min_stamina - 5.0):
+                            # Hero is eligible if visual fill >= (min_stamina - 5%) OR a high-confidence template match (>= 0.70) exists
+                            if fill_pct >= (min_stamina - 5.0) or has_bar_match:
                                 eligible_clicks.append((w_x, w_y))
 
                     # Method B: Fallback if work_button template didn't match
