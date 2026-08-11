@@ -147,7 +147,35 @@ class BombCryptoBot:
             self.update_progress()
             return True
 
-        # Step 2: Check for 'Connect Wallet' button
+        # Step 2: Check for MetaMask Sign/Confirm button popup standalone
+        metamask_sign = self.vision.find_template(
+            config.TARGET_IMAGES["metamask_sign"], screen_gray=screen
+        )
+        if metamask_sign:
+            logger.info(
+                f"[BOT] MetaMask Sign/Confirm button found (Confidence: {metamask_sign['confidence']:.2f}). Signing transaction..."
+            )
+            ActionEngine.click_match(metamask_sign)
+            self.vision.clear_cache()
+            ActionEngine.human_delay(5.0, 8.0)
+            self.update_progress()
+            return True
+
+        # Step 3: Check for Select MetaMask modal standalone
+        wallet_select = self.vision.find_template(
+            config.TARGET_IMAGES["select_metamask"], screen_gray=screen
+        )
+        if wallet_select:
+            logger.info(
+                f"[BOT] Select MetaMask icon found (Confidence: {wallet_select['confidence']:.2f}). Clicking..."
+            )
+            ActionEngine.click_match(wallet_select)
+            self.vision.clear_cache()
+            ActionEngine.human_delay(3.0, 5.0)
+            self.update_progress()
+            return True
+
+        # Step 4: Check for 'Connect Wallet' button
         connect_match = self.vision.find_template(
             config.TARGET_IMAGES["connect_wallet"], screen_gray=screen
         )

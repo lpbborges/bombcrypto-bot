@@ -92,8 +92,8 @@ TARGET_THRESHOLDS = {
 TARGET_ROIS = {
     "bottom_arrow": (0.60, 0.0, 1.0, 1.0),
     "heroes_button": (0.50, 0.0, 1.0, 1.0),
-    "connect_wallet": (0.20, 0.20, 0.80, 0.80),
-    "confirm_profile_ok": (0.20, 0.20, 0.80, 0.80),
+    "connect_wallet": (0.0, 0.0, 1.0, 1.0),
+    "confirm_profile_ok": (0.0, 0.0, 1.0, 1.0),
     "work_all_button": (0.15, 0.15, 0.85, 0.85),
     "close_button": (0.0, 0.0, 1.0, 1.0),
     "map_complete": (0.10, 0.10, 0.90, 0.90),
