@@ -182,10 +182,10 @@ class TestVisionEngine(unittest.TestCase):
         mock_sct.grab.assert_called_once_with(mock_sct.monitors[0])
 
     def test_conditional_grim_error_logging(self):
-        """Tests that grim install advice is only logged when on Linux/Wayland without grim."""
+        """Tests that Wayland-specific error advice is logged on Linux/Wayland capture failures."""
         self.vision.use_wayland_grim = False
 
-        # 1. On Wayland without grim -> grim instruction logged
+        # 1. On Wayland without working capture -> Wayland Xorg instruction logged
         with (
             patch("modules.vision.sys.platform", "linux"),
             patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}),
@@ -196,9 +196,9 @@ class TestVisionEngine(unittest.TestCase):
             self.assertLogs("BombCryptoBot", level="ERROR") as cm,
         ):
             self.vision.capture_screen(force_refresh=True)
-            self.assertTrue(any("install 'grim'" in log for log in cm.output))
+            self.assertTrue(any("Ubuntu on Xorg" in log for log in cm.output))
 
-        # 2. On X11 / non-Wayland -> standard error logged without grim instruction
+        # 2. On X11 / non-Wayland -> standard error logged without Wayland instruction
         self.vision.clear_cache()
         with (
             patch("modules.vision.sys.platform", "linux"),
@@ -210,7 +210,7 @@ class TestVisionEngine(unittest.TestCase):
             self.assertLogs("BombCryptoBot", level="ERROR") as cm,
         ):
             self.vision.capture_screen(force_refresh=True)
-            self.assertFalse(any("install 'grim'" in log for log in cm.output))
+            self.assertFalse(any("Ubuntu on Xorg" in log for log in cm.output))
 
 
 if __name__ == "__main__":

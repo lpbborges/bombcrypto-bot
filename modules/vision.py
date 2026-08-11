@@ -62,19 +62,16 @@ class VisionEngine:
     def _capture_via_grim(self):
         """Captures screen using native Wayland tool 'grim'."""
         try:
-            proc = subprocess.Popen(
-                ["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-            )
-            stdout, _ = proc.communicate()
-            if stdout:
-                img = Image.open(io.BytesIO(stdout))
+            proc = subprocess.Popen(["grim", "-"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            if proc.returncode == 0 and stdout:
+                img = Image.open(io.BytesIO(stdout)).convert("RGB")
                 img_np = np.array(img)
-                if img_np.ndim == 3:
-                    if img_np.shape[2] == 4:
-                        return cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
-                    elif img_np.shape[2] == 3:
-                        return cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                return img_np
+                return cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            elif stderr:
+                logger.debug(
+                    f"[VISION] grim screen capture returned code {proc.returncode}: {stderr.decode('utf-8', errors='ignore').strip()}"
+                )
         except Exception as e:
             logger.warning(f"[VISION] grim screen capture failed: {e}")
         return None
@@ -176,10 +173,12 @@ class VisionEngine:
         return None
 
     def _capture_via_cli_utils(self):
-        """Attempts screen capture using CLI utilities like gnome-screenshot or scrot."""
+        """Attempts screen capture using CLI utilities like gnome-screenshot, scrot, import, or maim."""
         for tool, cmd in [
             ("gnome-screenshot", ["gnome-screenshot", "-f"]),
             ("scrot", ["scrot"]),
+            ("import", ["import", "-window", "root"]),
+            ("maim", ["maim"]),
         ]:
             if shutil.which(tool):
                 tmp_path = os.path.join(tempfile.gettempdir(), f"bot_screen_{tool}.png")
@@ -231,24 +230,19 @@ class VisionEngine:
         if gray_img is None:
             gray_img = self._capture_via_pil_imagegrab()
 
-        # 6. Fallback to CLI screenshot tools (gnome-screenshot, scrot)
+        # 6. Fallback to CLI screenshot tools (gnome-screenshot, scrot, import, maim)
         if gray_img is None:
             gray_img = self._capture_via_cli_utils()
 
         # 7. Fallback if all screen capture methods failed
         if gray_img is None:
-            is_wayland_no_grim = (
-                sys.platform.startswith("linux")
-                and (
-                    "WAYLAND_DISPLAY" in os.environ
-                    or os.environ.get("XDG_SESSION_TYPE") == "wayland"
-                )
-                and shutil.which("grim") is None
+            is_wayland = sys.platform.startswith("linux") and (
+                "WAYLAND_DISPLAY" in os.environ or os.environ.get("XDG_SESSION_TYPE") == "wayland"
             )
-            if is_wayland_no_grim:
+            if is_wayland:
                 logger.error(
-                    "[VISION] All screen capture methods failed. Wayland environment detected without 'grim'. "
-                    "Please install 'grim' (`sudo apt install grim`) or set SCREENSHOT_MONITOR_INDEX = 0 in config.py / .env."
+                    "[VISION] All screen capture methods failed on Wayland. Note: On Ubuntu GNOME, 'grim' is unsupported by Mutter compositor. "
+                    "RECOMMENDED FIX: Log out and select 'Ubuntu on Xorg' at the login screen (⚙️ icon)."
                 )
             else:
                 logger.error(

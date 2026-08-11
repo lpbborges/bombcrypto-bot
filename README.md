@@ -121,10 +121,11 @@ All settings can be specified via command-line arguments or saved in a `.env` fi
 ## 🔧 Platform-Specific Notes & Troubleshooting
 
 ### 🐧 Linux (Wayland vs X11)
-- **Wayland (Ubuntu/Debian/Fedora/Arch)**: Native screen capture uses `grim`. If your screen capture returns a black image, install `grim`:
-  - Debian/Ubuntu: `sudo apt install grim`
-  - Arch Linux: `sudo pacman -S grim`
-  - Fedora: `sudo dnf install grim`
+- **Wayland (Ubuntu / GNOME / Sway / Hyprland)**:
+  - **Sway / Hyprland / wlroots**: Uses `grim` for screen capture (`sudo apt install grim` or `sudo pacman -S grim`).
+  - **Ubuntu GNOME (Mutter)**: GNOME's Mutter compositor does **not** support `grim`. If `grim` returns black or fails on Ubuntu GNOME:
+    - **Recommended Solution**: Switch to **Ubuntu on Xorg**. Log out, click your username, click the gear icon (⚙️) in the bottom-right corner, select **"Ubuntu on Xorg"**, and log in.
+    - **Alternative**: Install `gnome-screenshot` (`sudo apt install gnome-screenshot`).
 - **Mouse Input Backends**: Supports PyAutoGUI, `/dev/uinput` kernel device, `ydotool`, `xdotool`, and Hyprland `hyprctl`.
 
 ### 🪟 Windows
