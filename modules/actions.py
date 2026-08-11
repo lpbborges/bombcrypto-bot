@@ -41,13 +41,23 @@ except Exception as pyauto_err:
 import config
 
 try:
-    from evdev import UInput
     from evdev import ecodes as e
+except Exception:
+    class DummyEcodes:
+        EV_KEY = 1
+        BTN_LEFT = 272
+        BTN_RIGHT = 273
+
+    e = DummyEcodes()
+
+try:
+    from evdev import UInput
 
     UINPUT_MOUSE = UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT]}, name="bombcrypto-uinput-mouse")
 except Exception as uinput_err:
     UINPUT_MOUSE = None
     logger.debug(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
+
 
 HAS_HYPRCTL = shutil.which("hyprctl") is not None
 
