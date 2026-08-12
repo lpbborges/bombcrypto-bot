@@ -43,7 +43,9 @@ class VisionEngine:
             self.sct = None
         self.use_wayland_grim = self._check_wayland_grim()
         self._cached_screen = None
+        self._cached_screen_color = None
         self._template_cache = {}
+        self._monitor_offset = (0, 0)
         if self.use_wayland_grim:
             logger.info(
                 "[VISION] Wayland environment detected. Using 'grim' for native screen capture."
@@ -69,12 +71,43 @@ class VisionEngine:
         """Loads and caches a grayscale template image."""
         if not template_path or not os.path.exists(template_path):
             return None
-        if template_path in self._template_cache:
-            return self._template_cache[template_path]
+        cached = self._template_cache.get(template_path)
+        if cached is not None:
+            if isinstance(cached, dict):
+                return cached.get(1.0)
+            return cached
         template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
         if template is not None:
             self._template_cache[template_path] = template
         return template
+
+    def _get_scaled_templates(self, template_path, scales):
+        """Returns dict of {scale: resized_grayscale_image} cached in memory."""
+        if not template_path or not os.path.exists(template_path):
+            return {}
+        cached = self._template_cache.get(template_path)
+        if isinstance(cached, dict):
+            return cached
+
+        base_template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        if base_template is None:
+            return {}
+
+        scaled_dict = {}
+        orig_h, orig_w = base_template.shape[:2]
+        for scale in scales:
+            w, h = int(orig_w * scale), int(orig_h * scale)
+            if w < 10 or h < 10:
+                continue
+            resized = (
+                cv2.resize(base_template, (w, h), interpolation=cv2.INTER_AREA)
+                if scale < 1.0
+                else cv2.resize(base_template, (w, h), interpolation=cv2.INTER_CUBIC)
+            )
+            scaled_dict[scale] = resized
+
+        self._template_cache[template_path] = scaled_dict
+        return scaled_dict
 
     def _capture_via_grim(self):
         """Captures screen using native Wayland tool 'grim'."""
@@ -176,12 +209,51 @@ class VisionEngine:
                     return None
 
                 if img_np.size > 0:
+                    self._monitor_offset = (monitor.get("left", 0), monitor.get("top", 0))
                     return cv2.cvtColor(img_np, cv2.COLOR_BGRA2GRAY)
             except Exception as e:
                 logger.warning(
                     f"[VISION] mss grab failed for monitor index {idx} ({type(e).__name__}: {e})."
                 )
 
+        return None
+
+    def _capture_via_mss_color(self):
+        """Captures screen as BGR color using mss with monitor bounds checking."""
+        if self.sct is None:
+            try:
+                mss_factory = getattr(mss, "MSS", mss.mss)
+                self.sct = mss_factory()
+            except Exception:
+                return None
+
+        if self.sct is None:
+            return None
+
+        try:
+            monitors = getattr(self.sct, "monitors", [])
+            if not monitors:
+                return None
+
+            num_monitors = len(monitors)
+            monitors_to_try = []
+            if 0 <= self.monitor_index < num_monitors:
+                monitors_to_try.append(self.monitor_index)
+            for idx in [0, 1]:
+                if idx < num_monitors and idx not in monitors_to_try:
+                    monitors_to_try.append(idx)
+
+            for idx in monitors_to_try:
+                try:
+                    monitor = monitors[idx]
+                    sct_img = self.sct.grab(monitor)
+                    img_np = np.array(sct_img)
+                    if img_np.size > 0 and img_np.ndim == 3 and img_np.shape[2] == 4:
+                        return cv2.cvtColor(img_np, cv2.COLOR_BGRA2BGR)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return None
 
     def _capture_via_pil_imagegrab(self):
@@ -302,6 +374,9 @@ class VisionEngine:
             bgr_img = self._capture_via_grim_color()
 
         if bgr_img is None:
+            bgr_img = self._capture_via_mss_color()
+
+        if bgr_img is None:
             try:
                 from PIL import ImageGrab
 
@@ -335,7 +410,7 @@ class VisionEngine:
             screen_gray = self.capture_screen()
 
         debug_img = cv2.cvtColor(screen_gray, cv2.COLOR_GRAY2BGR)
-        top_left = match_result["top_left"]
+        top_left = match_result.get("local_top_left", match_result["top_left"])
         w, h = match_result["w"], match_result["h"]
         bottom_right = (top_left[0] + w, top_left[1] + h)
 
@@ -417,39 +492,41 @@ class VisionEngine:
         if screen_gray is None:
             screen_gray = self.capture_screen()
 
-        template = self._load_template(template_path)
-        if template is None:
-            return None
-
-        orig_h, orig_w = template.shape[:2]
         search_gray, offset_x, offset_y = self._crop_roi(screen_gray, roi)
+        mon_off_x, mon_off_y = self._monitor_offset
 
         best_val = -1.0
         best_match = None
 
-        # Test multi-scale matches from 0.50x to 1.50x scaling for multi-resolution / DPI support
         scales = [1.0, 0.90, 1.10, 0.80, 1.20, 0.70, 1.30, 0.60, 1.40, 0.50, 1.50]
+        scaled_dict = self._get_scaled_templates(template_path, scales)
+        if not scaled_dict:
+            return None
+
         for scale in scales:
-            w, h = int(orig_w * scale), int(orig_h * scale)
+            resized_temp = scaled_dict.get(scale)
+            if resized_temp is None:
+                continue
+
+            h, w = resized_temp.shape[:2]
             if w < 10 or h < 10 or w > search_gray.shape[1] or h > search_gray.shape[0]:
                 continue
 
-            resized_temp = (
-                cv2.resize(template, (w, h), interpolation=cv2.INTER_AREA)
-                if scale < 1.0
-                else cv2.resize(template, (w, h), interpolation=cv2.INTER_CUBIC)
-            )
             res = cv2.matchTemplate(search_gray, resized_temp, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
             if max_val > best_val:
                 best_val = max_val
                 best_match = {
-                    "x": max_loc[0] + offset_x + w // 2,
-                    "y": max_loc[1] + offset_y + h // 2,
+                    "x": max_loc[0] + offset_x + mon_off_x + w // 2,
+                    "y": max_loc[1] + offset_y + mon_off_y + h // 2,
                     "w": w,
                     "h": h,
-                    "top_left": (max_loc[0] + offset_x, max_loc[1] + offset_y),
+                    "top_left": (
+                        max_loc[0] + offset_x + mon_off_x,
+                        max_loc[1] + offset_y + mon_off_y,
+                    ),
+                    "local_top_left": (max_loc[0] + offset_x, max_loc[1] + offset_y),
                     "confidence": float(max_val),
                     "scale": scale,
                 }
@@ -481,6 +558,7 @@ class VisionEngine:
         if template is None:
             return []
 
+        mon_off_x, mon_off_y = self._monitor_offset
         h, w = template.shape[:2]
         search_gray, offset_x, offset_y = self._crop_roi(screen_gray, roi)
 
@@ -494,11 +572,15 @@ class VisionEngine:
         for pt in zip(*locations[::-1]):
             matches.append(
                 {
-                    "x": pt[0] + offset_x + w // 2,
-                    "y": pt[1] + offset_y + h // 2,
+                    "x": pt[0] + offset_x + mon_off_x + w // 2,
+                    "y": pt[1] + offset_y + mon_off_y + h // 2,
                     "w": w,
                     "h": h,
-                    "top_left": (pt[0] + offset_x, pt[1] + offset_y),
+                    "top_left": (
+                        pt[0] + offset_x + mon_off_x,
+                        pt[1] + offset_y + mon_off_y,
+                    ),
+                    "local_top_left": (pt[0] + offset_x, pt[1] + offset_y),
                     "confidence": float(res[pt[1], pt[0]]),
                 }
             )

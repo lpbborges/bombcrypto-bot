@@ -3,6 +3,7 @@ import os
 import time
 from enum import Enum, auto
 
+import cv2
 import numpy as np
 
 import config
@@ -40,8 +41,6 @@ def calculate_stamina_percentage(stamina_crop):
     if stamina_crop is None or stamina_crop.size == 0:
         return 0.0
     if stamina_crop.ndim == 3:
-        import cv2
-
         hsv = cv2.cvtColor(stamina_crop, cv2.COLOR_BGR2HSV)
         green_mask = cv2.inRange(hsv, (35, 70, 70), (85, 255, 255))
         col_has_green = np.sum(green_mask, axis=0) > 0

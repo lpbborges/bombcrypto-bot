@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import urllib.error
 import urllib.request
@@ -13,6 +14,10 @@ class NotificationManager:
         "warning": 0xF1C40F,
         "error": 0xE74C3C,
     }
+
+    _executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=2, thread_name_prefix="NotificationWorker"
+    )
 
     @staticmethod
     def send_discord(title: str, message: str, level: str = "info"):
@@ -78,12 +83,22 @@ class NotificationManager:
         return False
 
     @classmethod
-    def send_notification(cls, title: str, message: str, level: str = "info"):
+    def _send_all_internal(cls, title: str, message: str, level: str = "info"):
+        cls.send_discord(title, message, level=level)
+        cls.send_telegram(title, message, level=level)
+
+    @classmethod
+    def send_notification(cls, title: str, message: str, level: str = "info", sync: bool = False):
         if not getattr(config, "ENABLE_NOTIFICATIONS", True):
             return
 
-        cls.send_discord(title, message, level=level)
-        cls.send_telegram(title, message, level=level)
+        if sync:
+            cls._send_all_internal(title, message, level=level)
+        else:
+            try:
+                cls._executor.submit(cls._send_all_internal, title, message, level)
+            except Exception as e:
+                logger.warning(f"[NOTIFICATION] Async notification dispatch failed: {e}")
 
     @classmethod
     def notify_hero_cycle(cls, details: str = "Heroes sent to work successfully."):

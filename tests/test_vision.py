@@ -263,6 +263,38 @@ class TestVisionEngine(unittest.TestCase):
             screen_type, matches = self.vision.identify_screen(screen_gray=dummy_screen)
             self.assertEqual(screen_type, GameScreen.UNKNOWN)
 
+    def test_pre_scaled_template_caching(self):
+        """Tests that pre-scaled template images are cached for performance optimization."""
+        template_path = os.path.join(self.temp_dir, "scaled_pattern.png")
+        dummy_img = np.ones((30, 30), dtype=np.uint8) * 150
+        cv2.imwrite(template_path, dummy_img)
+
+        scales = [1.0, 0.90, 1.10]
+        scaled_dict = self.vision._get_scaled_templates(template_path, scales)
+        self.assertIn(1.0, scaled_dict)
+        self.assertIn(0.90, scaled_dict)
+        self.assertIn(1.10, scaled_dict)
+        self.assertIn(template_path, self.vision._template_cache)
+
+    def test_monitor_offset_translation(self):
+        """Tests that monitor left/top offsets are correctly added to match coordinates for multi-monitor setups."""
+        canvas = np.zeros((200, 200), dtype=np.uint8)
+        template = np.zeros((30, 30), dtype=np.uint8)
+        cv2.rectangle(template, (5, 5), (25, 25), 255, -1)
+        template_path = os.path.join(self.temp_dir, "monitor_target.png")
+        cv2.imwrite(template_path, template)
+
+        # Place template at top_left x=50, y=50 -> local center x=65, y=65
+        canvas[50:80, 50:80] = template
+        # Set monitor offset as if secondary monitor is positioned at x=1920, y=0
+        self.vision._monitor_offset = (1920, 0)
+
+        match = self.vision.find_template(template_path, threshold=0.9, screen_gray=canvas)
+        self.assertIsNotNone(match)
+        self.assertEqual(match["x"], 1920 + 65)
+        self.assertEqual(match["y"], 65)
+        self.assertEqual(match["local_top_left"], (50, 50))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import signal
 import sys
 import time
 import types
@@ -278,23 +279,65 @@ def main():
         return
 
     bot = BombCryptoBot()
+    running = True
+
+    def handle_shutdown(signum, frame):
+        nonlocal running
+        if running:
+            running = False
+            sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT (Ctrl+C)"
+            logger.info(f"[BOT] Shutdown signal received ({sig_name}). Exiting cleanly...")
+            logger.info(f"[SUMMARY] Final Runtime Performance Stats: {bot.get_stats_summary()}")
+            NotificationManager.send_notification(
+                "Bomb Crypto Bot Stopped",
+                f"Bot stopped ({sig_name}). {bot.get_stats_summary()}",
+                level="warning",
+                sync=True,
+            )
+            sys.exit(0)
 
     try:
-        while True:
-            bot.run_cycle()
+        signal.signal(signal.SIGINT, handle_shutdown)
+        signal.signal(signal.SIGTERM, handle_shutdown)
+    except (ValueError, AttributeError):
+        pass
+
+    consecutive_errors = 0
+    max_consecutive_errors = 5
+
+    try:
+        while running:
+            try:
+                bot.run_cycle()
+                consecutive_errors = 0
+            except Exception as cycle_err:
+                consecutive_errors += 1
+                logger.error(
+                    f"[BOT ERROR] Error in cycle #{bot.cycles_completed} (Attempt {consecutive_errors}/{max_consecutive_errors}): {cycle_err}",
+                    exc_info=True,
+                )
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.critical(
+                        f"[BOT FATAL] Exceeded maximum consecutive cycle errors ({max_consecutive_errors}). Triggering emergency browser refresh..."
+                    )
+                    NotificationManager.send_notification(
+                        "Bomb Crypto Bot Cycle Failure Limit",
+                        f"Consecutive cycle errors limit reached ({max_consecutive_errors}). Triggering recovery refresh.",
+                        level="error",
+                    )
+                    bot.handle_stuck_recovery()
+                    consecutive_errors = 0
+
             time.sleep(config.ERROR_CHECK_INTERVAL_SECONDS)
     except KeyboardInterrupt:
-        logger.info("[BOT] Bot manually stopped by user (Ctrl+C). Exiting...")
-        logger.info(f"[SUMMARY] Final Runtime Performance Stats: {bot.get_stats_summary()}")
-        NotificationManager.send_notification(
-            "Bomb Crypto Bot Stopped",
-            f"Bot manually stopped. {bot.get_stats_summary()}",
-            level="warning",
-        )
+        handle_shutdown(signal.SIGINT, None)
     except Exception as e:
-        logger.error(f"[ERROR] Unexpected exception occurred: {e}", exc_info=True)
+        logger.error(f"[ERROR] Unexpected main process crash: {e}", exc_info=True)
         NotificationManager.send_notification(
-            "Bomb Crypto Bot Error Crash", f"Unexpected exception: {e}", level="error"
+            "Bomb Crypto Bot Error Crash",
+            f"Unexpected process crash: {e}",
+            level="error",
+            sync=True,
         )
 
 
