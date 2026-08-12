@@ -11,13 +11,13 @@ import time
 import types
 
 import config
-from modules import ensure_mouseinfo_mocked
+from modules import ensure_mouseinfo_mocked, platform_utils
 from modules.logger import logger
 
 ensure_mouseinfo_mocked()
 
 # Ensure DISPLAY environment variable is set on Linux before importing pyautogui
-if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
+if platform_utils.is_linux() and "DISPLAY" not in os.environ:
     os.environ["DISPLAY"] = ":0"
 
 try:
@@ -40,7 +40,7 @@ except Exception as pyauto_err:
 
 
 try:
-    from evdev import ecodes as e
+    from evdev import ecodes
 except Exception:
 
     class DummyEcodes:
@@ -53,7 +53,9 @@ except Exception:
 try:
     from evdev import UInput
 
-    UINPUT_MOUSE = UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT]}, name="bombcrypto-uinput-mouse")
+    UINPUT_MOUSE = UInput(
+        {ecodes.EV_KEY: [ecodes.BTN_LEFT, ecodes.BTN_RIGHT]}, name="bombcrypto-uinput-mouse"
+    )
 except Exception as uinput_err:
     UINPUT_MOUSE = None
     logger.debug(f"[ACTION] Notice: uinput mouse initialization note: {uinput_err}")
@@ -73,8 +75,8 @@ def get_hyprland_scale():
             monitors = json.loads(proc.stdout)
             if monitors and isinstance(monitors, list):
                 return float(monitors[0].get("scale", 1.0))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
     return 1.0
 
 
@@ -172,8 +174,8 @@ class ActionEngine:
         for pt_x, pt_y in points:
             try:
                 pyautogui.moveTo(pt_x, pt_y)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
             time.sleep(step_delay)
 
         if HAS_HYPRCTL:
@@ -184,9 +186,10 @@ class ActionEngine:
                     ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
 
     @staticmethod
     def human_delay(
@@ -272,23 +275,24 @@ class ActionEngine:
                         ["hyprctl", "dispatch", "movecursor", str(logic_x), str(logic_y)],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
+                        timeout=2,
                     )
                     time.sleep(0.05)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Exception caught: {e}", exc_info=True)
 
             try:
                 pyautogui.moveTo(target_x, target_y)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
 
         # 1. Perform native kernel uinput click if available
         if UINPUT_MOUSE:
             try:
-                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 1)
                 UINPUT_MOUSE.syn()
                 time.sleep(0.04)
-                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
                 logger.info(
                     f"[ACTION] Performed native kernel uinput click at physical ({target_x}, {target_y})"
@@ -304,11 +308,13 @@ class ActionEngine:
                     ["ydotool", "mousemove", "-a", str(target_x), str(target_y)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
                 subprocess.run(
                     ["ydotool", "click", "0xC0"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
                 logger.info(
                     f"[ACTION] Performed ydotool click at physical ({target_x}, {target_y})"
@@ -324,6 +330,7 @@ class ActionEngine:
                     ["xdotool", "mousemove", str(target_x), str(target_y), "click", "1"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
                 logger.info(
                     f"[ACTION] Performed xdotool click at physical ({target_x}, {target_y})"
@@ -419,12 +426,13 @@ class ActionEngine:
                     ["hyprctl", "dispatch", "movecursor", str(logic_start_x), str(logic_start_y)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
                 time.sleep(0.06)
 
                 # Press left mouse button down
                 if UINPUT_MOUSE:
-                    UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                    UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 1)
                     UINPUT_MOUSE.syn()
                 else:
                     pyautogui.mouseDown(button="left")
@@ -440,6 +448,7 @@ class ActionEngine:
                         ["hyprctl", "dispatch", "movecursor", str(cur_lx), str(cur_ly)],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
+                        timeout=2,
                     )
                     time.sleep(max(0.01, duration / steps))
 
@@ -447,7 +456,7 @@ class ActionEngine:
 
                 # Release left mouse button
                 if UINPUT_MOUSE:
-                    UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                    UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 0)
                     UINPUT_MOUSE.syn()
                 else:
                     pyautogui.mouseUp(button="left")
@@ -460,12 +469,12 @@ class ActionEngine:
         if UINPUT_MOUSE:
             try:
                 ActionEngine.move_mouse_bezier(start_x, start_y, start_x, start_y, duration=0.05)
-                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 1)
+                UINPUT_MOUSE.write(evdev.EV_KEY, evdev.BTN_LEFT, 1)
                 UINPUT_MOUSE.syn()
                 time.sleep(0.05)
                 ActionEngine.move_mouse_bezier(start_x, start_y, end_x, end_y, duration=duration)
                 time.sleep(0.05)
-                UINPUT_MOUSE.write(e.EV_KEY, e.BTN_LEFT, 0)
+                UINPUT_MOUSE.write(evdev.EV_KEY, evdev.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
                 return
             except Exception as err:
@@ -490,6 +499,7 @@ class ActionEngine:
                     ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
                 return
             except Exception as err:
@@ -530,8 +540,8 @@ class ActionEngine:
         # Secondary wheel scroll attempt
         try:
             pyautogui.scroll(-int(clicks))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
 
     @staticmethod
     def scroll_up(x=None, y=None, distance=300, clicks=5):
@@ -561,5 +571,5 @@ class ActionEngine:
         # Secondary wheel scroll attempt
         try:
             pyautogui.scroll(int(clicks))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)

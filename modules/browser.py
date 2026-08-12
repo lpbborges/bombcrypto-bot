@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 import webbrowser
 
 import config
+from modules import platform_utils
 from modules.logger import logger
 
 # Known executable paths per browser type across platforms
@@ -124,7 +124,7 @@ class BrowserManager:
 
         # 1. Attempt process search using platform-appropriate mechanism
         try:
-            if sys.platform == "win32":
+            if platform_utils.is_windows():
                 # Windows tasklist process table query
                 proc = subprocess.run(
                     ["tasklist", "/FO", "CSV", "/NH"],
@@ -217,13 +217,13 @@ class BrowserManager:
 
         platform_key = (
             "win32"
-            if sys.platform == "win32"
-            else ("darwin" if sys.platform == "darwin" else "linux")
+            if platform_utils.is_windows()
+            else ("darwin" if platform_utils.is_mac() else "linux")
         )
         paths_to_check = KNOWN_BROWSER_PATHS[browser_type].get(platform_key, [])
 
         for path in paths_to_check:
-            if os.path.exists(path) and (sys.platform == "win32" or os.access(path, os.X_OK)):
+            if os.path.exists(path) and (platform_utils.is_windows() or os.access(path, os.X_OK)):
                 return path
 
         for cmd in KNOWN_BROWSER_PATHS[browser_type].get("commands", []):
@@ -295,7 +295,7 @@ class BrowserManager:
     def get_url_from_process_args() -> str | None:
         """Inspects command-line arguments of active browser processes for game URLs."""
         try:
-            if sys.platform == "win32":
+            if platform_utils.is_windows():
                 cmd = [
                     "powershell",
                     "-NoProfile",
@@ -331,7 +331,7 @@ class BrowserManager:
     @staticmethod
     def get_browser_window_title() -> str:
         """Gets window title string of active browser window."""
-        if sys.platform.startswith("linux"):
+        if platform_utils.is_linux():
             if shutil.which("hyprctl"):
                 try:
                     proc = subprocess.run(
@@ -358,8 +358,8 @@ class BrowserManager:
                             ):
                                 if title:
                                     return title
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Exception caught: {e}", exc_info=True)
             if shutil.which("xdotool"):
                 try:
                     proc = subprocess.run(
@@ -370,9 +370,9 @@ class BrowserManager:
                     )
                     if proc.returncode == 0 and proc.stdout.strip():
                         return proc.stdout.strip()
-                except Exception:
-                    pass
-        elif sys.platform == "win32":
+                except Exception as e:
+                    logger.debug(f"Exception caught: {e}", exc_info=True)
+        elif platform_utils.is_windows():
             try:
                 cmd = [
                     "powershell",
@@ -383,9 +383,9 @@ class BrowserManager:
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
                 if proc.returncode == 0 and proc.stdout.strip():
                     return proc.stdout.strip()
-            except Exception:
-                pass
-        elif sys.platform == "darwin":
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
+        elif platform_utils.is_mac():
             try:
                 cmd = [
                     "osascript",
@@ -395,8 +395,8 @@ class BrowserManager:
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
                 if proc.returncode == 0 and proc.stdout.strip():
                     return proc.stdout.strip()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
 
         return ""
 
@@ -550,40 +550,40 @@ def get_clipboard_text() -> str:
         text = pyperclip.paste()
         if text:
             return text.strip()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Exception caught: {e}", exc_info=True)
 
-    if sys.platform.startswith("linux"):
+    if platform_utils.is_linux():
         if shutil.which("wl-paste"):
             try:
                 return subprocess.check_output(
                     ["wl-paste", "--no-newline"], text=True, timeout=1
                 ).strip()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
         if shutil.which("xclip"):
             try:
                 return subprocess.check_output(
                     ["xclip", "-selection", "clipboard", "-o"], text=True, timeout=1
                 ).strip()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
         if shutil.which("xsel"):
             try:
                 return subprocess.check_output(["xsel", "-b", "-o"], text=True, timeout=1).strip()
-            except Exception:
-                pass
-    elif sys.platform == "darwin":
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
+    elif platform_utils.is_mac():
         try:
             return subprocess.check_output(["pbpaste"], text=True, timeout=1).strip()
-        except Exception:
-            pass
-    elif sys.platform == "win32":
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
+    elif platform_utils.is_windows():
         try:
             cmd = ["powershell", "-NoProfile", "-Command", "Get-Clipboard"]
             return subprocess.check_output(cmd, text=True, timeout=2).strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
 
     return ""
 

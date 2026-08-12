@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 import config
+from modules import platform_utils
 from modules.logger import logger
 
 
@@ -156,8 +157,8 @@ class VisionEngine:
                 img = Image.open(io.BytesIO(stdout)).convert("RGB")
                 img_np = np.array(img)
                 return cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
         return None
 
     def _capture_via_mac_screencapture(self):
@@ -171,8 +172,8 @@ class VisionEngine:
                 img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
                 try:
                     os.remove(tmp_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Exception caught: {e}", exc_info=True)
                 if img_np is not None and img_np.size > 0:
                     return img_np
         except Exception as e:
@@ -271,10 +272,10 @@ class VisionEngine:
                     img_np = np.array(sct_img)
                     if img_np.size > 0 and img_np.ndim == 3 and img_np.shape[2] == 4:
                         return cv2.cvtColor(img_np, cv2.COLOR_BGRA2BGR)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug(f"Exception caught: {e}", exc_info=True)
+        except Exception as e:
+            logger.debug(f"Exception caught: {e}", exc_info=True)
         return None
 
     def _capture_via_pil_imagegrab(self):
@@ -311,8 +312,8 @@ class VisionEngine:
                         img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
                         try:
                             os.remove(tmp_path)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Exception caught: {e}", exc_info=True)
                         if img_np is not None and img_np.size > 0:
                             return img_np
                 except Exception as e:
@@ -335,7 +336,7 @@ class VisionEngine:
             gray_img = self._capture_via_grim()
 
         # 2. macOS native screencapture
-        if gray_img is None and sys.platform == "darwin":
+        if gray_img is None and platform_utils.is_mac():
             gray_img = self._capture_via_mac_screencapture()
 
         # 3. Capture via MSS (X11 / Windows / macOS) with error and bounds handling
@@ -359,7 +360,7 @@ class VisionEngine:
 
         # 7. Fallback if all screen capture methods failed
         if gray_img is None:
-            is_wayland = sys.platform.startswith("linux") and (
+            is_wayland = platform_utils.is_linux() and (
                 "WAYLAND_DISPLAY" in os.environ or os.environ.get("XDG_SESSION_TYPE") == "wayland"
             )
             if is_wayland:
@@ -409,8 +410,8 @@ class VisionEngine:
                             bgr_img = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
                         elif img_np.shape[2] == 3:
                             bgr_img = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
 
         if bgr_img is None:
             # Fallback to grayscale converted to BGR
@@ -609,18 +610,23 @@ class VisionEngine:
 
     def find_unique_matches(
         self,
-        template_path: str,
+        template_path: str | list[str],
         threshold: float | None = None,
         screen_gray: np.ndarray | None = None,
         roi=None,
         min_distance: float = 25,
     ) -> list[dict]:
         """
-        Finds all occurrences of template image above threshold and filters overlapping matches.
+        Finds all occurrences of template image(s) above threshold and filters overlapping matches.
         """
-        raw_matches = self.find_all_templates(
-            template_path, threshold=threshold, screen_gray=screen_gray, roi=roi
-        )
+        if isinstance(template_path, str):
+            template_path = [template_path]
+
+        raw_matches = []
+        for path in template_path:
+            raw_matches.extend(
+                self.find_all_templates(path, threshold=threshold, screen_gray=screen_gray, roi=roi)
+            )
         return filter_overlapping_matches(raw_matches, min_distance=min_distance)
 
     def identify_screen(self, screen_gray=None):

@@ -13,7 +13,7 @@ from modules.actions import ActionEngine
 from modules.browser import BrowserManager
 from modules.logger import logger
 from modules.notifications import NotificationManager
-from modules.vision import GameScreen, VisionEngine, filter_overlapping_matches
+from modules.vision import GameScreen, VisionEngine
 
 
 def calculate_stamina_percentage(stamina_crop):
@@ -426,24 +426,23 @@ class BombCryptoBot:
             )
 
         # 2. Also locate stamina bar matches from targets/staminas/
-        stamina_raw = []
-        for target_path, _ in stamina_targets:
-            if os.path.exists(target_path):
-                matches = self.vision.find_all_templates(
-                    target_path, screen_gray=work_all_screen, threshold=0.82
-                )
-                stamina_raw.extend(matches)
+        stamina_paths = [t[0] for t in stamina_targets if os.path.exists(t[0])]
+        min_dist = getattr(config, "STAMINA_MIN_DISTANCE", 30)
 
-        # Fallback to full_bar and 80_bar if no staminas folder targets matched
-        if not stamina_raw:
-            for key in ["full_bar", "80_bar"]:
-                if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                    matches = self.vision.find_all_templates(
-                        config.TARGET_IMAGES[key], screen_gray=work_all_screen
-                    )
-                    stamina_raw.extend(matches)
-
-        stamina_matches = filter_overlapping_matches(stamina_raw, min_distance=30)
+        if stamina_paths:
+            stamina_matches = self.vision.find_unique_matches(
+                stamina_paths, screen_gray=work_all_screen, threshold=0.82, min_distance=min_dist
+            )
+        else:
+            # Fallback to full_bar and 80_bar if no staminas folder targets matched
+            fallback_paths = [
+                config.TARGET_IMAGES[key]
+                for key in ["full_bar", "80_bar"]
+                if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key])
+            ]
+            stamina_matches = self.vision.find_unique_matches(
+                fallback_paths, screen_gray=work_all_screen, min_distance=min_dist
+            )
         eligible_clicks = []
 
         # Method A: For each green WORK button, check stamina on the same row
@@ -451,7 +450,9 @@ class BombCryptoBot:
             for w_btn in work_button_matches:
                 w_x, w_y = w_btn["x"], w_btn["y"]
                 has_bar_match = any(
-                    abs(s_m["y"] - w_y) <= 25 and s_m["x"] < w_x for s_m in stamina_matches
+                    abs(s_m["y"] - w_y) <= getattr(config, "STAMINA_Y_TOLERANCE", 25)
+                    and s_m["x"] < w_x
+                    for s_m in stamina_matches
                 )
 
                 crop_xmin = max(0, w_x - getattr(config, "STAMINA_CROP_XMIN_OFFSET", 180))

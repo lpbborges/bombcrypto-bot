@@ -284,7 +284,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     def test_filter_overlapping_matches(self):
         """Tests filtering of duplicate/overlapping vision matches by min_distance."""
-        from modules.bot_logic import filter_overlapping_matches
+        from modules.vision import filter_overlapping_matches
 
         raw = [
             {"x": 100, "y": 200, "confidence": 0.80},
