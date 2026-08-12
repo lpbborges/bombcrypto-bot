@@ -1,6 +1,5 @@
 import time
 import unittest
-from config import BotConfig
 from unittest.mock import patch
 
 import numpy as np
@@ -12,6 +11,20 @@ from modules.bot_logic import BombCryptoBot, BotState, format_duration
 
 class TestBombCryptoBotLogic(unittest.TestCase):
     def setUp(self):
+        from modules.browser import BrowserManager
+        from modules.diagnostics import SystemDiagnostic
+        from modules.notifications import NotificationManager
+
+        BrowserManager.config = BotConfig()
+        SystemDiagnostic.config = BotConfig()
+        NotificationManager.config = BotConfig()
+        from modules.browser import BrowserManager
+        from modules.diagnostics import SystemDiagnostic
+        from modules.notifications import NotificationManager
+
+        BrowserManager.config = BotConfig()
+        SystemDiagnostic.config = BotConfig()
+        NotificationManager.config = BotConfig()
         self.bot = BombCryptoBot(BotConfig())
 
     def test_format_duration(self):
@@ -86,7 +99,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertFalse(is_stuck)
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
 
-    @patch("modules.actions.ActionEngine(BotConfig()).refresh_page")
+    @patch("modules.actions.ActionEngine.refresh_page")
     def test_handle_stuck_recovery(self, mock_refresh):
         """Tests recovery execution (refreshing page & state reset)."""
         self.bot.set_state(BotState.STUCK_RECOVERY)
@@ -98,7 +111,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
+    @patch("modules.actions.ActionEngine.click_match")
     def test_check_errors_or_disconnect(self, mock_click, mock_capture, mock_find):
         """Tests handling error modals when detected on screen."""
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
@@ -113,9 +126,9 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_click.assert_called_once()
 
     @patch("modules.vision.VisionEngine.find_template")
-    @patch("modules.actions.ActionEngine(BotConfig()).refresh_page")
+    @patch("modules.actions.ActionEngine.refresh_page")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
+    @patch("modules.actions.ActionEngine.click_match")
     def test_check_errors_error_message_with_ok(
         self, mock_click, mock_capture, mock_refresh, mock_find
     ):
@@ -135,9 +148,9 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_refresh.assert_not_called()
 
     @patch("modules.vision.VisionEngine.find_template")
-    @patch("modules.actions.ActionEngine(BotConfig()).refresh_page")
+    @patch("modules.actions.ActionEngine.refresh_page")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
+    @patch("modules.actions.ActionEngine.click_match")
     def test_check_errors_error_message_without_ok(
         self, mock_click, mock_capture, mock_refresh, mock_find
     ):
@@ -158,8 +171,8 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_handle_login_confirm_profile(self, mock_delay, mock_click, mock_capture, mock_find):
         """Tests confirm profile OK popup flow."""
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
@@ -171,23 +184,23 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertTrue(handled)
         mock_click.assert_called_once()
 
-    @patch.object(BotConfig, "game_version", "v13d")
-    @patch.object(BotConfig, "direct_landing_mode", True)
     def test_enter_treasure_hunt_direct_mode_v13d(self):
         """Tests direct landing mode in v13d skips menu icon matching."""
+        self.bot.config.game_version = "v13d"
+        self.bot.config.direct_landing_mode = True
         result = self.bot.enter_treasure_hunt()
         self.assertTrue(result)
 
-    @patch.object(BotConfig, "game_version", "v10l")
-    @patch.object(BotConfig, "direct_landing_mode", False)
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_enter_treasure_hunt_v10l_click_icon(
         self, mock_delay, mock_click, mock_capture, mock_find
     ):
         """Tests that v10l mode locates and clicks the treasure hunt icon after refresh/login."""
+        self.bot.config.game_version = "v10l"
+        self.bot.config.direct_landing_mode = False
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         mock_find.side_effect = lambda key, **k: (
             {"x": 100, "y": 200, "confidence": 0.85} if "treasure_hunt" in key else None
@@ -197,21 +210,21 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertTrue(result)
         mock_click.assert_called_once_with({"x": 100, "y": 200, "confidence": 0.85})
 
-    @patch.object(BotConfig, "game_version", "v10l")
-    @patch.object(BotConfig, "direct_landing_mode", False)
     @patch("modules.vision.VisionEngine.find_template", return_value=None)
     @patch("modules.vision.VisionEngine.capture_screen")
     def test_enter_treasure_hunt_v10l_icon_not_found(self, mock_capture, mock_find):
         """Tests that v10l mode returns False when treasure hunt icon is not visible."""
+        self.bot.config.game_version = "v10l"
+        self.bot.config.direct_landing_mode = False
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         result = self.bot.enter_treasure_hunt()
         self.assertFalse(result)
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_at")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_send_heroes_to_work_flow(
         self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
     ):
@@ -232,21 +245,19 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_find.side_effect = find_side_effect
 
-        with (
-            patch.object(BotConfig, "work_only_stamina", False),
-            patch.object(BotConfig, "hero_work_mode", "all"),
-        ):
-            success = self.bot.send_heroes_to_work()
-            self.assertTrue(success)
-            self.assertGreater(self.bot.last_hero_work_time, 0)
-            self.assertEqual(mock_click_match.call_count, 4)
-            mock_click_at.assert_called_once_with(50, 50)  # Screen center click to collapse HUD
+        self.bot.config.work_only_stamina = False
+        self.bot.config.hero_work_mode = "all"
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
+        self.assertGreater(self.bot.last_hero_work_time, 0)
+        self.assertEqual(mock_click_match.call_count, 4)
+        mock_click_at.assert_called_once_with(50, 50)  # Screen center click to collapse HUD
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_at")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_send_heroes_to_work_all_already_working(
         self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
     ):
@@ -269,20 +280,18 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_find.side_effect = find_side_effect
 
-        with (
-            patch.object(BotConfig, "work_only_stamina", False),
-            patch.object(BotConfig, "hero_work_mode", "all"),
-        ):
-            success = self.bot.send_heroes_to_work()
-            self.assertTrue(success)
-            self.assertGreater(self.bot.last_hero_work_time, 0)
-            # Should click arrow_menu_button, heroes_icon, close_button (3 match clicks) and NOT rest_all_button
-            self.assertEqual(mock_click_match.call_count, 3)
-            for call_arg in mock_click_match.call_args_list:
-                matched_obj = call_arg[0][0]
-                # Verify no click was made on rest_all location
-                self.assertNotEqual(matched_obj, {"x": 50, "y": 50, "confidence": 0.9})
-            mock_click_at.assert_called_once_with(50, 50)
+        self.bot.config.work_only_stamina = False
+        self.bot.config.hero_work_mode = "all"
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
+        self.assertGreater(self.bot.last_hero_work_time, 0)
+        # Should click arrow_menu_button, heroes_icon, close_button (3 match clicks) and NOT rest_all_button
+        self.assertEqual(mock_click_match.call_count, 3)
+        for call_arg in mock_click_match.call_args_list:
+            matched_obj = call_arg[0][0]
+            # Verify no click was made on rest_all location
+            self.assertNotEqual(matched_obj, {"x": 50, "y": 50, "confidence": 0.9})
+        mock_click_at.assert_called_once_with(50, 50)
 
     def test_filter_overlapping_matches(self):
         """Tests filtering of duplicate/overlapping vision matches by min_distance."""
@@ -301,21 +310,21 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     def test_load_stamina_targets(self):
         """Tests loading stamina targets from targets/staminas/ with min_stamina filter."""
-        targets_60 = config.load_stamina_targets(60.0)
+        targets_60 = self.bot.config.load_stamina_targets(60.0)
         percentages = [pct for _, pct in targets_60]
         self.assertTrue(all(pct >= 60.0 for pct in percentages))
         self.assertIn(100.0, percentages)
         self.assertIn(60.0, percentages)
         self.assertNotIn(50.0, percentages)
 
-        targets_80 = config.load_stamina_targets(80.0)
+        targets_80 = self.bot.config.load_stamina_targets(80.0)
         percentages_80 = [pct for _, pct in targets_80]
         self.assertTrue(all(pct >= 80.0 for pct in percentages_80))
         self.assertNotIn(70.0, percentages_80)
 
     def test_load_tier_targets(self):
         """Tests loading tier targets from targets/tiers/ mapped to priority values."""
-        tier_targets = config.load_tier_targets()
+        tier_targets = self.bot.config.load_tier_targets()
         self.assertGreater(len(tier_targets), 0)
         # Verify sorted descending by priority
         priorities = [prio for _, _, prio in tier_targets]
@@ -327,9 +336,9 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.find_all_templates")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_at")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_send_heroes_to_work_home_strategy(
         self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
     ):
@@ -372,29 +381,27 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_find.side_effect = find_side_effect
         mock_find_all.side_effect = find_all_side_effect
 
-        with (
-            patch.object(BotConfig, "work_only_stamina", True),
-            patch.object(BotConfig, "hero_work_mode", "stamina"),
-            patch.object(BotConfig, "enable_home_strategy", True),
-            patch.object(BotConfig, "hero_modal_max_scrolls", 1),
-        ):
-            success = self.bot.send_heroes_to_work()
-            self.assertTrue(success)
+        self.bot.config.work_only_stamina = True
+        self.bot.config.hero_work_mode = "stamina"
+        self.bot.config.enable_home_strategy = True
+        self.bot.config.hero_modal_max_scrolls = 1
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
 
-            # Verify click_at was called for row 2 (Super Legendary at y=250) BEFORE row 1 (Super Rare at y=150)
-            # and row 3 (currently working, no work_button) was NOT sent to home.
-            click_at_calls = mock_click_at.call_args_list
-            home_clicks = [call[0] for call in click_at_calls if call[0][0] == 400]
-            self.assertEqual(len(home_clicks), 2)
-            self.assertEqual(home_clicks[0], (400, 250))  # Super Legendary clicked first!
-            self.assertEqual(home_clicks[1], (400, 150))  # Super Rare clicked second!
+        # Verify click_at was called for row 2 (Super Legendary at y=250) BEFORE row 1 (Super Rare at y=150)
+        # and row 3 (currently working, no work_button) was NOT sent to home.
+        click_at_calls = mock_click_at.call_args_list
+        home_clicks = [call[0] for call in click_at_calls if call[0][0] == 400]
+        self.assertEqual(len(home_clicks), 2)
+        self.assertEqual(home_clicks[0], (400, 250))  # Super Legendary clicked first!
+        self.assertEqual(home_clicks[1], (400, 150))  # Super Rare clicked second!
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.find_all_templates")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_at")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_send_heroes_to_work_stamina_mode(
         self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
     ):
@@ -421,22 +428,20 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_find.side_effect = find_side_effect
         mock_find_all.side_effect = find_all_side_effect
 
-        with (
-            patch.object(BotConfig, "work_only_stamina", True),
-            patch.object(BotConfig, "hero_work_mode", "stamina"),
-            patch.object(BotConfig, "hero_min_stamina", 60.0),
-            patch.object(BotConfig, "hero_modal_max_scrolls", 1),
-        ):
-            success = self.bot.send_heroes_to_work()
-            self.assertTrue(success)
-            # click_at should be called for work_button on the same row at (350, 152)
-            mock_click_at.assert_any_call(350, 152)
+        self.bot.config.work_only_stamina = True
+        self.bot.config.hero_work_mode = "stamina"
+        self.bot.config.hero_min_stamina = 60.0
+        self.bot.config.hero_modal_max_scrolls = 1
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
+        # click_at should be called for work_button on the same row at (350, 152)
+        mock_click_at.assert_any_call(350, 152)
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_at")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.click_at")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_send_heroes_to_work_work_all_mode(
         self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
     ):
@@ -457,18 +462,16 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_find.side_effect = find_side_effect
 
-        with (
-            patch.object(BotConfig, "work_only_stamina", False),
-            patch.object(BotConfig, "hero_work_mode", "all"),
-        ):
-            success = self.bot.send_heroes_to_work()
-            self.assertTrue(success)
-            self.assertEqual(mock_click_match.call_count, 4)
+        self.bot.config.work_only_stamina = False
+        self.bot.config.hero_work_mode = "all"
+        success = self.bot.send_heroes_to_work()
+        self.assertTrue(success)
+        self.assertEqual(mock_click_match.call_count, 4)
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_check_map_cleared_button_detected(
         self, mock_delay, mock_click, mock_capture, mock_find
     ):
@@ -485,8 +488,8 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_check_map_cleared_modal_fallback(
         self, mock_delay, mock_click, mock_capture, mock_find
     ):
@@ -509,7 +512,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         handled = self.bot.check_map_cleared()
         self.assertFalse(handled)
 
-    @patch("modules.actions.ActionEngine(BotConfig()).idle_jitter")
+    @patch("modules.actions.ActionEngine.idle_jitter")
     def test_check_idle_jitter_triggered(self, mock_jitter):
         """Tests BombCryptoBot triggers idle jitter when RESTING and interval elapsed."""
         self.bot.set_state(BotState.RESTING)
@@ -520,7 +523,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         mock_jitter.assert_called_once()
         self.assertAlmostEqual(self.bot.last_idle_jitter_time, time.time(), delta=2.0)
 
-    @patch("modules.actions.ActionEngine(BotConfig()).idle_jitter")
+    @patch("modules.actions.ActionEngine.idle_jitter")
     def test_check_idle_jitter_not_resting(self, mock_jitter):
         """Tests BombCryptoBot does not trigger idle jitter if not in RESTING state."""
         self.bot.set_state(BotState.SENDING_HEROES)
@@ -530,39 +533,39 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
         mock_jitter.assert_not_called()
 
-    @patch.object(BotConfig, "only_refresh_on_error", False)
-    @patch.object(BotConfig, "refresh_interval_minutes", 15.0)
-    @patch("modules.actions.ActionEngine(BotConfig()).refresh_page")
+    @patch("modules.actions.ActionEngine.refresh_page")
     def test_check_periodic_refresh_triggered(self, mock_refresh):
         """Tests periodic refresh triggers page refresh when interval has elapsed."""
+        self.bot.config.only_refresh_on_error = False
+        self.bot.config.refresh_interval_minutes = 15.0
         self.bot.last_periodic_refresh_time = time.time() - (15 * 60 + 10)
         refreshed = self.bot.check_periodic_refresh()
         self.assertTrue(refreshed)
         mock_refresh.assert_called_once()
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
 
-    @patch.object(BotConfig, "only_refresh_on_error", True)
-    @patch.object(BotConfig, "refresh_interval_minutes", 15.0)
-    @patch("modules.actions.ActionEngine(BotConfig()).refresh_page")
+    @patch("modules.actions.ActionEngine.refresh_page")
     def test_check_periodic_refresh_combined_mode(self, mock_refresh):
         """Tests periodic refresh triggers even if ONLY_REFRESH_ON_ERROR is also True when interval > 0."""
+        self.bot.config.only_refresh_on_error = True
+        self.bot.config.refresh_interval_minutes = 15.0
         self.bot.last_periodic_refresh_time = time.time() - (15 * 60 + 10)
         refreshed = self.bot.check_periodic_refresh()
         self.assertTrue(refreshed)
         mock_refresh.assert_called_once()
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
 
-    @patch.object(BotConfig, "game_version", "v10l")
-    @patch.object(BotConfig, "direct_landing_mode", False)
-    @patch.object(BotConfig, "refresh_interval_minutes", 15.0)
     @patch("modules.vision.VisionEngine.find_template")
     @patch("modules.vision.VisionEngine.capture_screen")
-    @patch("modules.actions.ActionEngine(BotConfig()).click_match")
-    @patch("modules.actions.ActionEngine(BotConfig()).human_delay")
+    @patch("modules.actions.ActionEngine.click_match")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_check_periodic_refresh_v10l(
         self, mock_delay, mock_click_match, mock_capture, mock_find
     ):
         """Tests v10l periodic refresh clicks back button and re-enters treasure hunt."""
+        self.bot.config.game_version = "v10l"
+        self.bot.config.direct_landing_mode = False
+        self.bot.config.refresh_interval_minutes = 15.0
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
 
         def side_effect(key, **kwargs):
@@ -577,14 +580,14 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertEqual(mock_click_match.call_count, 2)
         self.assertEqual(self.bot.state, BotState.INITIALIZING)
 
-    @patch.object(BotConfig, "only_refresh_on_error", True)
-    @patch.object(BotConfig, "enable_hero_work_actions", False)
-    @patch.object(BotConfig, "direct_landing_mode", True)
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.vision.VisionEngine.find_template", return_value=None)
     @patch("modules.bot_logic.BombCryptoBot.send_heroes_to_work")
     def test_run_cycle_only_refresh_on_error(self, mock_send_heroes, mock_find, mock_capture):
         """Tests that run_cycle in ONLY_REFRESH_ON_ERROR mode skips hero work clicks."""
+        self.bot.config.only_refresh_on_error = True
+        self.bot.config.enable_hero_work_actions = False
+        self.bot.config.direct_landing_mode = True
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         self.bot.run_cycle()
         mock_send_heroes.assert_not_called()

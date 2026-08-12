@@ -10,7 +10,6 @@ import sys
 import time
 import types
 
-import config
 from config import BotConfig
 from modules import ensure_mouseinfo_mocked, platform_utils
 from modules.logger import logger
@@ -537,7 +536,7 @@ class ActionEngine:
         end_y = max(50, y - int(distance / 2))
 
         # Perform drag UP inside modal to scroll container content DOWN
-        ActionEngine.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
+        self.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
 
         # Secondary wheel scroll attempt
         try:
@@ -567,7 +566,7 @@ class ActionEngine:
         end_y = y + int(distance / 2)
 
         # Perform drag DOWN inside modal to scroll container content UP
-        ActionEngine.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
+        self.drag_scroll(start_x, start_y, end_x, end_y, duration=0.4)
 
         # Secondary wheel scroll attempt
         try:

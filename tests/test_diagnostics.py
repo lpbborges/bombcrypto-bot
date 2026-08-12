@@ -1,8 +1,7 @@
-from config import BotConfig
 import unittest
-from config import BotConfig
 from unittest.mock import patch
 
+from config import BotConfig
 from modules.diagnostics import SystemDiagnostic
 
 
@@ -13,7 +12,7 @@ class TestSystemDiagnostics(unittest.TestCase):
         import numpy as np
 
         mock_capture.return_value = np.ones((100, 100), dtype=np.uint8) * 128
-        results = SystemDiagnostic.run_diagnostics(verbose=False)
+        results = SystemDiagnostic.run_diagnostics(config=BotConfig(), verbose=False)
 
         self.assertIn("os_info", results)
         self.assertIn("dependencies", results)

@@ -1,13 +1,16 @@
 import unittest
-from config import BotConfig
 from unittest.mock import MagicMock, patch
 
-import config
 from config import BotConfig
 from modules.browser import BrowserManager
 
 
 class TestBrowserManager(unittest.TestCase):
+    def setUp(self):
+        self.browser_manager = BrowserManager()
+        self.browser_manager.config = BotConfig()
+        BrowserManager.config = BotConfig()
+
     @patch("subprocess.check_output")
     def test_get_attached_browser_info_running(self, mock_ps):
         """Tests detecting an active running Brave process from system process table."""
@@ -66,9 +69,9 @@ class TestBrowserManager(unittest.TestCase):
     def test_custom_browser_executable_path_override(self, mock_access, mock_exists):
         """Tests custom BROWSER_EXECUTABLE_PATH configuration override."""
         custom_path = "/custom/path/to/mybrowser"
-        with patch.object(BotConfig, "browser_executable_path", custom_path):
-            found = BrowserManager.find_browser_executable("brave")
-            self.assertEqual(found, custom_path)
+        BrowserManager.config.browser_executable_path = custom_path
+        found = BrowserManager.find_browser_executable("brave")
+        self.assertEqual(found, custom_path)
 
     @patch("subprocess.run")
     def test_windows_process_query(self, mock_run):
@@ -83,6 +86,15 @@ class TestBrowserManager(unittest.TestCase):
             info = BrowserManager.get_attached_browser_info()
             self.assertEqual(info["status"], "ATTACHED & RUNNING")
             self.assertEqual(info["pid"], "4321")
+
+    @patch("sys.platform", "darwin")
+    @patch(
+        "shutil.which", return_value="/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    )
+    def test_find_brave_executable_darwin(self, mock_which):
+        """Tests locating Brave binary using shutil.which."""
+        path = BrowserManager.find_browser_executable("brave")
+        self.assertEqual(path, "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser")
 
     @patch("modules.browser.BrowserManager.get_attached_browser_info")
     @patch("modules.browser.BrowserManager.launch_browser")
@@ -125,10 +137,11 @@ class TestBrowserManager(unittest.TestCase):
 
         synced_ver = BrowserManager.sync_game_version_from_browser()
         self.assertEqual(synced_ver, "v10l")
-        self.assertEqual(config.GAME_VERSION, "v10l")
-        self.assertFalse(config.DIRECT_LANDING_MODE)
+        self.assertEqual(BrowserManager.config.game_version, "v10l")
+        self.assertFalse(BrowserManager.config.direct_landing_mode)
         self.assertEqual(
-            config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10l/index.html"
+            BrowserManager.config.direct_treasure_url,
+            "https://game.bombcrypto.io/web/v10l/index.html",
         )
 
 

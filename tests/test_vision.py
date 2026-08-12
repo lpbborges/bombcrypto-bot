@@ -2,12 +2,12 @@ import os
 import shutil
 import tempfile
 import unittest
-from config import BotConfig
 from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
 
+from config import BotConfig
 from modules.vision import VisionEngine
 
 
@@ -139,13 +139,12 @@ class TestVisionEngine(unittest.TestCase):
 
     def test_target_threshold_and_roi_config_resolution(self):
         """Tests automatic lookup of target-specific thresholds and ROIs from config."""
-        import config
         from config import BotConfig
 
-        self.assertEqual(config.get_target_threshold("bottom_arrow"), 0.70)
-        self.assertEqual(config.get_target_threshold("confirm_profile_ok"), 0.75)
-        self.assertEqual(config.get_target_roi("bottom_arrow"), (0.60, 0.0, 1.0, 1.0))
-        self.assertIsNone(config.get_target_roi("non_existent_target"))
+        self.assertEqual(BotConfig().get_target_threshold("bottom_arrow"), 0.70)
+        self.assertEqual(BotConfig().get_target_threshold("confirm_profile_ok"), 0.75)
+        self.assertEqual(BotConfig().get_target_roi("bottom_arrow"), (0.60, 0.0, 1.0, 1.0))
+        self.assertIsNone(BotConfig().get_target_roi("non_existent_target"))
 
     def test_capture_screen_mss_xprotoerror_fallback(self):
         """Tests that X11 Protocol Error during mss grab is caught and falls back safely without crashing."""

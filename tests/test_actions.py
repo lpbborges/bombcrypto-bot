@@ -1,5 +1,4 @@
 import unittest
-from config import BotConfig
 from unittest.mock import MagicMock, patch
 
 import config
@@ -78,7 +77,7 @@ class TestActionEngine(unittest.TestCase):
         mock_moveto.assert_called_with(200, 200)
 
     @patch("pyautogui.position", return_value=(500, 500))
-    @patch("modules.actions.self.action_engine.move_mouse_bezier")
+    @patch("modules.actions.ActionEngine.move_mouse_bezier")
     def test_idle_jitter(self, mock_bezier, mock_pos):
         """Tests idle_jitter calculates random subtle offset and calls bezier movement."""
         target_x, target_y = self.action_engine.idle_jitter(max_offset=15)
@@ -124,7 +123,7 @@ class TestActionEngine(unittest.TestCase):
     @patch("pyautogui.hotkey")
     @patch("pyautogui.write")
     @patch("pyautogui.press")
-    @patch("modules.actions.self.action_engine.human_delay")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_navigate_to_url(self, mock_delay, mock_press, mock_write, mock_hotkey):
         """Tests navigate_to_url hotkey and typing sequence."""
         test_url = "https://game.bombcrypto.io/test"
@@ -134,19 +133,19 @@ class TestActionEngine(unittest.TestCase):
         mock_write.assert_called_once_with(test_url, interval=0.01)
         mock_press.assert_called_once_with("enter")
 
-    @patch("modules.actions.self.action_engine.navigate_to_url")
+    @patch("modules.actions.ActionEngine.navigate_to_url")
     def test_refresh_page_direct_mode(self, mock_nav):
         """Tests refresh_page uses direct URL navigation when DIRECT_LANDING_MODE is True."""
-        with patch.object(BotConfig, "direct_landing_mode", True):
-            self.action_engine.refresh_page()
-            mock_nav.assert_called_once_with(config.DIRECT_TREASURE_URL)
+        self.action_engine.config.direct_landing_mode = True
+        self.action_engine.refresh_page()
+        mock_nav.assert_called_once_with(config.DIRECT_TREASURE_URL)
 
     @patch("pyautogui.press")
-    @patch("modules.actions.self.action_engine.human_delay")
+    @patch("modules.actions.ActionEngine.human_delay")
     def test_refresh_page_f5_mode(self, mock_delay, mock_press):
         """Tests refresh_page uses F5 key when DIRECT_LANDING_MODE is False."""
 
-    @patch("modules.actions.self.action_engine.drag_scroll")
+    @patch("modules.actions.ActionEngine.drag_scroll")
     def test_scroll_down_invokes_drag_scroll(self, mock_drag):
         """Tests that scroll_down invokes drag_scroll drag gesture from bottom to top."""
         self.action_engine.scroll_down(500, 500, distance=200)

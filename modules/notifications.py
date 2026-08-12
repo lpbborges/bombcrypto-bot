@@ -6,7 +6,6 @@ import json
 import urllib.error
 import urllib.request
 
-from config import BotConfig
 from modules.logger import logger
 
 

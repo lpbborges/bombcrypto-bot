@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import webbrowser
 
-from config import BotConfig
 from modules import platform_utils
 from modules.logger import logger
 
@@ -87,6 +86,8 @@ class BrowserManager:
     @classmethod
     def get_target_browser_name(cls) -> str:
         """Returns normalized target browser type string from config."""
+        if getattr(cls, "config", None) is None:
+            return "brave"
         browser_type = getattr(cls.config, "target_browser", "brave").lower()
         if browser_type in ("auto", "default", ""):
             return "brave"

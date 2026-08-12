@@ -11,11 +11,12 @@ from modules.vision import VisionEngine
 
 class SystemDiagnostic:
     @classmethod
-    def run_diagnostics(cls, verbose=True) -> dict:
+    def run_diagnostics(cls, config, verbose=True) -> dict:
         """
         Executes a comprehensive system and configuration check for Bomb Crypto Bot.
         Returns a dictionary of diagnostic results and logs findings.
         """
+        cls.config = config
         results = {
             "os_info": {},
             "dependencies": {},
@@ -121,7 +122,7 @@ class SystemDiagnostic:
         # 4. Screen Capture Engine Test
         print(" [4/6] Screen Capture Diagnostics:")
         try:
-            vision = VisionEngine()
+            vision = VisionEngine(cls.config)
             frame = vision.capture_screen(force_refresh=True)
             if frame is not None and frame.size > 0:
                 h, w = frame.shape[:2]
@@ -224,7 +225,7 @@ class SystemDiagnostic:
 
 def run_setup_wizard():
     """Interactive wizard to guide non-technical users in generating a .env configuration file."""
-    env_path = os.path.join(cls.config.base_dir, ".env")
+    env_path = os.path.join(BotConfig().base_dir, ".env")
     print("\n==================================================")
     print("      BOMB CRYPTO BOT INTERACTIVE SETUP WIZARD    ")
     print("==================================================\n")
