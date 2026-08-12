@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import atexit
 import concurrent.futures
 import json
 import urllib.error
@@ -123,3 +126,6 @@ class NotificationManager:
         cls, details: str = "Bot stall threshold exceeded. Refreshing browser..."
     ):
         cls.send_notification("Anti-Stuck Recovery Triggered", details, level="error")
+
+
+atexit.register(NotificationManager._executor.shutdown, wait=False)

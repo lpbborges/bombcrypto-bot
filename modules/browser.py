@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
@@ -410,6 +412,7 @@ class BrowserManager:
         original_clip = get_clipboard_text()
         try:
             import time
+
             import pyautogui
 
             pyautogui.hotkey("ctrl", "l")

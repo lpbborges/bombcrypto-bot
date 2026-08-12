@@ -1,19 +1,40 @@
+from __future__ import annotations
+
 import io
+import math
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from enum import Enum, auto
 
 import cv2
 import mss
 import numpy as np
 from PIL import Image
 
-from enum import Enum, auto
-
 import config
 from modules.logger import logger
+
+
+def filter_overlapping_matches(matches: list[dict], min_distance: float = 30) -> list[dict]:
+    """Filters duplicate/overlapping vision matches by distance, keeping highest confidence."""
+    if not matches:
+        return []
+    sorted_matches = sorted(matches, key=lambda m: m["confidence"], reverse=True)
+    filtered = []
+    for m in sorted_matches:
+        keep = True
+        for f in filtered:
+            dist = math.hypot(m["x"] - f["x"], m["y"] - f["y"])
+            if dist < min_distance:
+                keep = False
+                break
+        if keep:
+            filtered.append(m)
+    filtered.sort(key=lambda m: m["y"])
+    return filtered
 
 
 class GameScreen(Enum):
@@ -585,6 +606,22 @@ class VisionEngine:
                 }
             )
         return matches
+
+    def find_unique_matches(
+        self,
+        template_path: str,
+        threshold: float | None = None,
+        screen_gray: np.ndarray | None = None,
+        roi=None,
+        min_distance: float = 25,
+    ) -> list[dict]:
+        """
+        Finds all occurrences of template image above threshold and filters overlapping matches.
+        """
+        raw_matches = self.find_all_templates(
+            template_path, threshold=threshold, screen_gray=screen_gray, roi=roi
+        )
+        return filter_overlapping_matches(raw_matches, min_distance=min_distance)
 
     def identify_screen(self, screen_gray=None):
         """

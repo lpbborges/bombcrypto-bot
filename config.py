@@ -1,9 +1,19 @@
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass
 
 # Base Directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGETS_DIR = os.path.join(BASE_DIR, "targets")
 DEBUG_DIR = os.path.join(BASE_DIR, "debug")
+
+# Named UI Layout Constants & Region Offsets
+STAMINA_CROP_XMIN_OFFSET = 180
+STAMINA_CROP_XMAX_OFFSET = 45
+STAMINA_CROP_Y_OFFSET = 18
+DEFAULT_FALLBACK_CENTER_X = 960
+DEFAULT_FALLBACK_CENTER_Y = 540
 
 # Load environment variables from .env file if available
 env_file = os.path.join(BASE_DIR, ".env")
@@ -344,3 +354,45 @@ def get_target_roi(target_name_or_path: str):
     """Returns the per-template Region of Interest (ROI) tuple or None."""
     key = get_target_key(target_name_or_path)
     return TARGET_ROIS.get(key, None)
+
+
+@dataclass
+class BotConfig:
+    """Encapsulated Bot Configuration Dataclass."""
+
+    game_version: str = GAME_VERSION
+    direct_treasure_url: str = DIRECT_TREASURE_URL
+    direct_landing_mode: bool = DIRECT_LANDING_MODE
+    target_browser: str = TARGET_BROWSER
+    browser_executable_path: str = BROWSER_EXECUTABLE_PATH
+    auto_launch_browser: bool = AUTO_LAUNCH_BROWSER
+    default_match_threshold: float = DEFAULT_MATCH_THRESHOLD
+    screenshot_monitor_index: int = SCREENSHOT_MONITOR_INDEX
+    save_debug_images: bool = SAVE_DEBUG_IMAGES
+    mouse_click_offset: int = MOUSE_CLICK_OFFSET
+    min_click_duration: float = MIN_CLICK_DURATION
+    max_click_duration: float = MAX_CLICK_DURATION
+    min_action_delay: float = MIN_ACTION_DELAY
+    max_action_delay: float = MAX_ACTION_DELAY
+    use_bezier_curves: bool = USE_BEZIER_CURVES
+    bezier_min_steps: int = BEZIER_MIN_STEPS
+    use_gaussian_delays: bool = USE_GAUSSIAN_DELAYS
+    enable_idle_jitter: bool = ENABLE_IDLE_JITTER
+    idle_jitter_interval_seconds: float = IDLE_JITTER_INTERVAL_SECONDS
+    idle_jitter_max_offset: int = IDLE_JITTER_MAX_OFFSET
+    dry_run: bool = DRY_RUN
+    enable_notifications: bool = ENABLE_NOTIFICATIONS
+    discord_webhook_url: str = DISCORD_WEBHOOK_URL
+    telegram_bot_token: str = TELEGRAM_BOT_TOKEN
+    telegram_chat_id: str = TELEGRAM_CHAT_ID
+    hero_work_interval_minutes: float = HERO_WORK_INTERVAL_MINUTES
+    error_check_interval_seconds: float = ERROR_CHECK_INTERVAL_SECONDS
+    max_stuck_timeout_minutes: float = MAX_STUCK_TIMEOUT_MINUTES
+    only_refresh_on_error: bool = ONLY_REFRESH_ON_ERROR
+    refresh_interval_minutes: float = REFRESH_INTERVAL_MINUTES
+    enable_hero_work_actions: bool = ENABLE_HERO_WORK_ACTIONS
+    hero_work_mode: str = HERO_WORK_MODE
+    work_only_stamina: bool = WORK_ONLY_STAMINA
+    hero_min_stamina: float = HERO_MIN_STAMINA
+    hero_modal_max_scrolls: int = HERO_MODAL_MAX_SCROLLS
+    enable_home_strategy: bool = ENABLE_HOME_STRATEGY

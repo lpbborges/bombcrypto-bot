@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import math
 import os
@@ -8,13 +10,11 @@ import sys
 import time
 import types
 
-# Preemptively mock mouseinfo to prevent mouseinfo's missing-tkinter sys.exit()
-if "mouseinfo" not in sys.modules:
-    dummy_mouseinfo = types.ModuleType("mouseinfo")
-    dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
-    sys.modules["mouseinfo"] = dummy_mouseinfo
-
+import config
+from modules import ensure_mouseinfo_mocked
 from modules.logger import logger
+
+ensure_mouseinfo_mocked()
 
 # Ensure DISPLAY environment variable is set on Linux before importing pyautogui
 if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
@@ -38,7 +38,6 @@ except Exception as pyauto_err:
     pyautogui.click = lambda *a, **k: None
     sys.modules["pyautogui"] = pyautogui
 
-import config
 
 try:
     from evdev import ecodes as e

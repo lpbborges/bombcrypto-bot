@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import os
 import time
@@ -11,26 +13,7 @@ from modules.actions import ActionEngine
 from modules.browser import BrowserManager
 from modules.logger import logger
 from modules.notifications import NotificationManager
-from modules.vision import GameScreen, VisionEngine
-
-
-def filter_overlapping_matches(matches, min_distance=30):
-    """Filters duplicate/overlapping vision matches by distance, keeping highest confidence."""
-    if not matches:
-        return []
-    sorted_matches = sorted(matches, key=lambda m: m["confidence"], reverse=True)
-    filtered = []
-    for m in sorted_matches:
-        keep = True
-        for f in filtered:
-            dist = math.hypot(m["x"] - f["x"], m["y"] - f["y"])
-            if dist < min_distance:
-                keep = False
-                break
-        if keep:
-            filtered.append(m)
-    filtered.sort(key=lambda m: m["y"])
-    return filtered
+from modules.vision import GameScreen, VisionEngine, filter_overlapping_matches
 
 
 def calculate_stamina_percentage(stamina_crop):
@@ -414,12 +397,269 @@ class BombCryptoBot:
 
         return False
 
+    def _scan_and_work_eligible_heroes(
+        self,
+        scroll_pass: int,
+        min_stamina: float,
+        stamina_targets: list[tuple[str, float]],
+        enable_home: bool,
+        tier_targets: list[tuple[str, str, int]],
+        all_home_candidates: list[dict],
+    ) -> int:
+        """Processes a single scroll pass during hero work scanning."""
+        work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
+        if work_all_screen_color.ndim == 3:
+            work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
+        else:
+            work_all_screen = work_all_screen_color
+
+        # 1. Locate all green WORK buttons on current modal screen
+        work_button_matches = []
+        if "work_button" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["work_button"]
+        ):
+            work_button_matches = self.vision.find_unique_matches(
+                config.TARGET_IMAGES["work_button"],
+                screen_gray=work_all_screen,
+                threshold=0.65,
+                min_distance=25,
+            )
+
+        # 2. Also locate stamina bar matches from targets/staminas/
+        stamina_raw = []
+        for target_path, _ in stamina_targets:
+            if os.path.exists(target_path):
+                matches = self.vision.find_all_templates(
+                    target_path, screen_gray=work_all_screen, threshold=0.82
+                )
+                stamina_raw.extend(matches)
+
+        # Fallback to full_bar and 80_bar if no staminas folder targets matched
+        if not stamina_raw:
+            for key in ["full_bar", "80_bar"]:
+                if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
+                    matches = self.vision.find_all_templates(
+                        config.TARGET_IMAGES[key], screen_gray=work_all_screen
+                    )
+                    stamina_raw.extend(matches)
+
+        stamina_matches = filter_overlapping_matches(stamina_raw, min_distance=30)
+        eligible_clicks = []
+
+        # Method A: For each green WORK button, check stamina on the same row
+        if work_button_matches:
+            for w_btn in work_button_matches:
+                w_x, w_y = w_btn["x"], w_btn["y"]
+                has_bar_match = any(
+                    abs(s_m["y"] - w_y) <= 25 and s_m["x"] < w_x for s_m in stamina_matches
+                )
+
+                crop_xmin = max(0, w_x - getattr(config, "STAMINA_CROP_XMIN_OFFSET", 180))
+                crop_xmax = max(0, w_x - getattr(config, "STAMINA_CROP_XMAX_OFFSET", 45))
+                crop_ymin = max(0, w_y - getattr(config, "STAMINA_CROP_Y_OFFSET", 18))
+                crop_ymax = min(
+                    work_all_screen_color.shape[0],
+                    w_y + getattr(config, "STAMINA_CROP_Y_OFFSET", 18),
+                )
+
+                stamina_crop = work_all_screen_color[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
+                fill_pct = calculate_stamina_percentage(stamina_crop)
+
+                if fill_pct >= (min_stamina - 2.0) or has_bar_match:
+                    eligible_clicks.append((w_x, w_y))
+
+        # Method B: Fallback if work_button template didn't match
+        elif stamina_matches:
+            for s_m in stamina_matches:
+                eligible_clicks.append((s_m["x"] + 140, s_m["y"]))
+
+        # Filter unique click points
+        unique_clicks = []
+        for c_x, c_y in eligible_clicks:
+            if not any(math.hypot(c_x - u_x, c_y - u_y) < 20 for u_x, u_y in unique_clicks):
+                unique_clicks.append((c_x, c_y))
+
+        sent_count = 0
+        if unique_clicks:
+            logger.info(
+                f"[BOT] Pass {scroll_pass + 1}: Found {len(unique_clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
+            )
+            for click_x, click_y in unique_clicks:
+                ActionEngine.click_at(click_x, click_y)
+                sent_count += 1
+                ActionEngine.human_delay(0.5, 1.2)
+
+            self.vision.clear_cache()
+            ActionEngine.human_delay(1.0, 2.0)
+
+        # Scan Home candidates on current pass for full-menu prioritization
+        if (
+            enable_home
+            and "available_home" in config.TARGET_IMAGES
+            and os.path.exists(config.TARGET_IMAGES["available_home"])
+        ):
+            if unique_clicks:
+                work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
+                if work_all_screen_color.ndim == 3:
+                    work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
+                else:
+                    work_all_screen = work_all_screen_color
+
+            remaining_work_matches = []
+            if "work_button" in config.TARGET_IMAGES and os.path.exists(
+                config.TARGET_IMAGES["work_button"]
+            ):
+                remaining_work_matches = self.vision.find_unique_matches(
+                    config.TARGET_IMAGES["work_button"],
+                    screen_gray=work_all_screen,
+                    threshold=0.70,
+                    min_distance=25,
+                )
+
+            home_button_matches = self.vision.find_unique_matches(
+                config.TARGET_IMAGES["available_home"],
+                screen_gray=work_all_screen,
+                threshold=0.75,
+                min_distance=25,
+            )
+
+            if home_button_matches and remaining_work_matches:
+                all_tier_matches = []
+                for t_path, t_name, priority in tier_targets:
+                    if os.path.exists(t_path):
+                        t_matches = self.vision.find_unique_matches(
+                            t_path, screen_gray=work_all_screen, threshold=0.70, min_distance=20
+                        )
+                        for tm in t_matches:
+                            tm["tier_name"] = t_name
+                            tm["priority"] = priority
+                            all_tier_matches.append(tm)
+
+                for h_btn in home_button_matches:
+                    h_x, h_y = h_btn["x"], h_btn["y"]
+                    is_resting = any(
+                        abs(w_btn["y"] - h_y) <= 25 for w_btn in remaining_work_matches
+                    )
+                    if not is_resting:
+                        continue
+
+                    tier_match = next(
+                        (tm for tm in all_tier_matches if abs(tm["y"] - h_y) <= 30),
+                        None,
+                    )
+                    if tier_match and tier_match["priority"] > 0:
+                        all_home_candidates.append(
+                            {
+                                "priority": tier_match["priority"],
+                                "tier_name": tier_match["tier_name"],
+                                "pass": scroll_pass,
+                                "x": h_x,
+                                "y": h_y,
+                            }
+                        )
+
+        return sent_count
+
+    def _execute_home_strategy(
+        self, max_scroll_passes: int, all_home_candidates: list[dict], screen_shape: tuple
+    ) -> int:
+        """Executes Phase 2 global home placement across modal scroll passes."""
+        all_home_candidates.sort(key=lambda c: c["priority"], reverse=True)
+        logger.info(
+            f"[BOT] Full menu scan complete. Discovered {len(all_home_candidates)} resting high-tier candidate(s) for home."
+        )
+
+        center_x = screen_shape[1] // 2
+        center_y = screen_shape[0] // 2
+        for _ in range(max_scroll_passes - 1):
+            ActionEngine.scroll_up(center_x, center_y, clicks=5)
+            time.sleep(0.1)
+        self.vision.clear_cache()
+        ActionEngine.human_delay(1.5, 2.5)
+
+        total_sent_home = 0
+        home_full = False
+
+        for target_pass in range(max_scroll_passes):
+            if home_full:
+                break
+
+            pass_candidates = [c for c in all_home_candidates if c["pass"] == target_pass]
+            if pass_candidates:
+                pass_screen = self.vision.capture_screen(force_refresh=True)
+                home_button_matches = self.vision.find_unique_matches(
+                    config.TARGET_IMAGES["available_home"],
+                    screen_gray=pass_screen,
+                    threshold=0.75,
+                    min_distance=25,
+                )
+
+                if (
+                    not home_button_matches
+                    and "without_space_home" in config.TARGET_IMAGES
+                    and os.path.exists(config.TARGET_IMAGES["without_space_home"])
+                ):
+                    no_space = self.vision.find_template(
+                        config.TARGET_IMAGES["without_space_home"],
+                        screen_gray=pass_screen,
+                    )
+                    if no_space:
+                        logger.info("[BOT] Home is full or unavailable.")
+                        home_full = True
+
+                if home_button_matches and not home_full:
+                    for cand in pass_candidates:
+                        matched_btn = next(
+                            (b for b in home_button_matches if abs(b["y"] - cand["y"]) <= 25),
+                            None,
+                        )
+                        click_x = matched_btn["x"] if matched_btn else cand["x"]
+                        click_y = matched_btn["y"] if matched_btn else cand["y"]
+
+                        ActionEngine.click_at(click_x, click_y)
+                        total_sent_home += 1
+                        logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
+                        ActionEngine.human_delay(0.5, 1.2)
+
+                    self.vision.clear_cache()
+                    ActionEngine.human_delay(1.0, 2.0)
+
+            if target_pass < max_scroll_passes - 1:
+                ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                self.vision.clear_cache()
+                ActionEngine.human_delay(1.5, 2.5)
+
+        return total_sent_home
+
+    def _close_heroes_modal(self, screen_shape: tuple) -> None:
+        """Closes Heroes modal menu and clicks screen center."""
+        close_screen = self.vision.capture_screen(force_refresh=True)
+        close_match = self.vision.find_template(
+            config.TARGET_IMAGES["close_button"], screen_gray=close_screen
+        )
+        if close_match:
+            logger.info(
+                f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})..."
+            )
+            ActionEngine.click_match(close_match)
+            self.vision.clear_cache()
+            ActionEngine.human_delay(1.5, 2.5)
+
+        center_x = screen_shape[1] // 2
+        center_y = screen_shape[0] // 2
+        logger.info(
+            f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu..."
+        )
+        ActionEngine.click_at(center_x, center_y)
+        self.vision.clear_cache()
+        ActionEngine.human_delay(1.5, 2.5)
+
     def send_heroes_to_work(self) -> bool:
         """
         Sequence:
         1. Click the bottom arrow to expand the bottom menu.
         2. Click 'heroes_button' inside the opened menu.
-        3. Click 'Work All' inside the heroes modal.
+        3. Click 'Work All' or select heroes by stamina inside the heroes modal.
         4. Click close modal button ('X').
         """
         logger.info("[BOT] Attempting to send heroes to work...")
@@ -467,193 +707,21 @@ class BombCryptoBot:
                 stamina_targets = config.load_stamina_targets(min_stamina)
                 tier_targets = config.load_tier_targets() if enable_home else []
                 total_sent = 0
-                total_sent_home = 0
+                all_home_candidates = []
 
-                all_home_candidates = []  # Full-menu collection of resting high-tier candidates
-
-                # Phase 1: Full-menu scanning for Work execution and Home candidate discovery
                 for scroll_pass in range(max_scroll_passes):
-                    work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
-                    if work_all_screen_color.ndim == 3:
-                        import cv2
-
-                        work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
-                    else:
-                        work_all_screen = work_all_screen_color
-
-                    # 1. Locate all green WORK buttons on current modal screen
-                    work_buttons_raw = []
-                    if "work_button" in config.TARGET_IMAGES and os.path.exists(
-                        config.TARGET_IMAGES["work_button"]
-                    ):
-                        work_buttons_raw = self.vision.find_all_templates(
-                            config.TARGET_IMAGES["work_button"],
-                            screen_gray=work_all_screen,
-                            threshold=0.65,
-                        )
-                    work_button_matches = filter_overlapping_matches(
-                        work_buttons_raw, min_distance=25
+                    sent = self._scan_and_work_eligible_heroes(
+                        scroll_pass,
+                        min_stamina,
+                        stamina_targets,
+                        enable_home,
+                        tier_targets,
+                        all_home_candidates,
                     )
-
-                    # 2. Also locate stamina bar matches from targets/staminas/
-                    stamina_raw = []
-                    for target_path, pct in stamina_targets:
-                        if os.path.exists(target_path):
-                            matches = self.vision.find_all_templates(
-                                target_path, screen_gray=work_all_screen, threshold=0.82
-                            )
-                            stamina_raw.extend(matches)
-
-                    # Fallback to full_bar and 80_bar if no staminas folder targets matched
-                    if not stamina_raw:
-                        for key in ["full_bar", "80_bar"]:
-                            if key in config.TARGET_IMAGES and os.path.exists(
-                                config.TARGET_IMAGES[key]
-                            ):
-                                matches = self.vision.find_all_templates(
-                                    config.TARGET_IMAGES[key], screen_gray=work_all_screen
-                                )
-                                stamina_raw.extend(matches)
-
-                    stamina_matches = filter_overlapping_matches(stamina_raw, min_distance=30)
-
-                    eligible_clicks = []
-
-                    # Method A: For each green WORK button, check stamina on the same row
-                    if work_button_matches:
-                        for w_btn in work_button_matches:
-                            w_x, w_y = w_btn["x"], w_btn["y"]
-
-                            # Check if high-confidence template match >= min_stamina exists on same row
-                            has_bar_match = any(
-                                abs(s_m["y"] - w_y) <= 25 and s_m["x"] < w_x
-                                for s_m in stamina_matches
-                            )
-
-                            # Exact stamina bar crop relative to WORK button center (w_x, w_y)
-                            crop_xmin = max(0, w_x - 180)
-                            crop_xmax = max(0, w_x - 45)
-                            crop_ymin = max(0, w_y - 18)
-                            crop_ymax = min(work_all_screen_color.shape[0], w_y + 18)
-
-                            stamina_crop = work_all_screen_color[
-                                crop_ymin:crop_ymax, crop_xmin:crop_xmax
-                            ]
-                            fill_pct = calculate_stamina_percentage(stamina_crop)
-
-                            # Hero is eligible if HSV green fill >= (min_stamina - 2.0%) OR high-confidence template match exists
-                            if fill_pct >= (min_stamina - 2.0) or has_bar_match:
-                                eligible_clicks.append((w_x, w_y))
-
-                    # Method B: Fallback if work_button template didn't match
-                    elif stamina_matches:
-                        for s_m in stamina_matches:
-                            eligible_clicks.append((s_m["x"] + 140, s_m["y"]))
-
-                    # Filter unique click points
-                    unique_clicks = []
-                    for c_x, c_y in eligible_clicks:
-                        if not any(
-                            math.hypot(c_x - u_x, c_y - u_y) < 20 for u_x, u_y in unique_clicks
-                        ):
-                            unique_clicks.append((c_x, c_y))
-
-                    if unique_clicks:
-                        logger.info(
-                            f"[BOT] Pass {scroll_pass + 1}: Found {len(unique_clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
-                        )
-                        for click_x, click_y in unique_clicks:
-                            ActionEngine.click_at(click_x, click_y)
-                            total_sent += 1
-                            ActionEngine.human_delay(0.5, 1.2)
-
-                        self.vision.clear_cache()
-                        ActionEngine.human_delay(1.0, 2.0)
-
-                    # Scan Home candidates on current pass for full-menu prioritization
-                    if (
-                        enable_home
-                        and "available_home" in config.TARGET_IMAGES
-                        and os.path.exists(config.TARGET_IMAGES["available_home"])
-                    ):
-                        if unique_clicks:
-                            work_all_screen_color = self.vision.capture_screen_color(
-                                force_refresh=True
-                            )
-                            if work_all_screen_color.ndim == 3:
-                                import cv2
-
-                                work_all_screen = cv2.cvtColor(
-                                    work_all_screen_color, cv2.COLOR_BGR2GRAY
-                                )
-                            else:
-                                work_all_screen = work_all_screen_color
-
-                        remaining_work_raw = []
-                        if "work_button" in config.TARGET_IMAGES and os.path.exists(
-                            config.TARGET_IMAGES["work_button"]
-                        ):
-                            remaining_work_raw = self.vision.find_all_templates(
-                                config.TARGET_IMAGES["work_button"],
-                                screen_gray=work_all_screen,
-                                threshold=0.70,
-                            )
-                        remaining_work_matches = filter_overlapping_matches(
-                            remaining_work_raw, min_distance=25
-                        )
-
-                        available_home_raw = self.vision.find_all_templates(
-                            config.TARGET_IMAGES["available_home"],
-                            screen_gray=work_all_screen,
-                            threshold=0.75,
-                        )
-                        home_button_matches = filter_overlapping_matches(
-                            available_home_raw, min_distance=25
-                        )
-
-                        if home_button_matches and remaining_work_matches:
-                            all_tier_matches = []
-                            for t_path, t_name, priority in tier_targets:
-                                if os.path.exists(t_path):
-                                    t_raw = self.vision.find_all_templates(
-                                        t_path, screen_gray=work_all_screen, threshold=0.70
-                                    )
-                                    for tm in filter_overlapping_matches(t_raw, min_distance=20):
-                                        tm["tier_name"] = t_name
-                                        tm["priority"] = priority
-                                        all_tier_matches.append(tm)
-
-                            for h_btn in home_button_matches:
-                                h_x, h_y = h_btn["x"], h_btn["y"]
-
-                                # Hero must be currently resting (work_button present on row)
-                                is_resting = any(
-                                    abs(w_btn["y"] - h_y) <= 25 for w_btn in remaining_work_matches
-                                )
-                                if not is_resting:
-                                    continue
-
-                                # Match tier badge on same hero row
-                                tier_match = next(
-                                    (tm for tm in all_tier_matches if abs(tm["y"] - h_y) <= 30),
-                                    None,
-                                )
-
-                                if tier_match and tier_match["priority"] > 0:
-                                    all_home_candidates.append(
-                                        {
-                                            "priority": tier_match["priority"],
-                                            "tier_name": tier_match["tier_name"],
-                                            "pass": scroll_pass,
-                                            "x": h_x,
-                                            "y": h_y,
-                                        }
-                                    )
-
-                    # Perform modal scroll down if more passes remain
+                    total_sent += sent
                     if scroll_pass < max_scroll_passes - 1:
-                        center_x = work_all_screen.shape[1] // 2
-                        center_y = work_all_screen.shape[0] // 2
+                        center_x = screen.shape[1] // 2
+                        center_y = screen.shape[0] // 2
                         ActionEngine.scroll_down(center_x, center_y, clicks=5)
                         self.vision.clear_cache()
                         ActionEngine.human_delay(1.5, 2.5)
@@ -665,86 +733,12 @@ class BombCryptoBot:
                         f"[BOT] No heroes with stamina >= {min_stamina:.0f}% found in list."
                     )
 
-                # Phase 2: Global Home Placement (prioritizing highest-tier resting heroes across full menu)
                 if enable_home and all_home_candidates:
-                    # Sort candidates across the ENTIRE menu by priority DESCENDING
-                    all_home_candidates.sort(key=lambda c: c["priority"], reverse=True)
-                    logger.info(
-                        f"[BOT] Full menu scan complete. Discovered {len(all_home_candidates)} resting high-tier candidate(s) for home."
+                    total_home = self._execute_home_strategy(
+                        max_scroll_passes, all_home_candidates, screen.shape
                     )
-
-                    # Scroll back to top of modal
-                    center_x = work_all_screen.shape[1] // 2
-                    center_y = work_all_screen.shape[0] // 2
-                    for _ in range(max_scroll_passes - 1):
-                        ActionEngine.scroll_up(center_x, center_y, clicks=5)
-                        time.sleep(0.1)
-                    self.vision.clear_cache()
-                    ActionEngine.human_delay(1.5, 2.5)
-
-                    # Execute home placement clicks pass by pass from top to bottom
-                    home_full = False
-                    for target_pass in range(max_scroll_passes):
-                        if home_full:
-                            break
-
-                        pass_candidates = [
-                            c for c in all_home_candidates if c["pass"] == target_pass
-                        ]
-                        if pass_candidates:
-                            pass_screen = self.vision.capture_screen(force_refresh=True)
-                            available_home_raw = self.vision.find_all_templates(
-                                config.TARGET_IMAGES["available_home"],
-                                screen_gray=pass_screen,
-                                threshold=0.75,
-                            )
-                            home_button_matches = filter_overlapping_matches(
-                                available_home_raw, min_distance=25
-                            )
-
-                            if (
-                                not home_button_matches
-                                and "without_space_home" in config.TARGET_IMAGES
-                                and os.path.exists(config.TARGET_IMAGES["without_space_home"])
-                            ):
-                                no_space = self.vision.find_template(
-                                    config.TARGET_IMAGES["without_space_home"],
-                                    screen_gray=pass_screen,
-                                )
-                                if no_space:
-                                    logger.info("[BOT] Home is full or unavailable.")
-                                    home_full = True
-
-                            if home_button_matches and not home_full:
-                                for cand in pass_candidates:
-                                    # Match candidate to available_home button on current pass screen
-                                    matched_btn = next(
-                                        (
-                                            b
-                                            for b in home_button_matches
-                                            if abs(b["y"] - cand["y"]) <= 25
-                                        ),
-                                        None,
-                                    )
-                                    click_x = matched_btn["x"] if matched_btn else cand["x"]
-                                    click_y = matched_btn["y"] if matched_btn else cand["y"]
-
-                                    ActionEngine.click_at(click_x, click_y)
-                                    total_sent_home += 1
-                                    logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
-                                    ActionEngine.human_delay(0.5, 1.2)
-
-                                self.vision.clear_cache()
-                                ActionEngine.human_delay(1.0, 2.0)
-
-                        # Scroll down to next pass if passes remain
-                        if target_pass < max_scroll_passes - 1:
-                            ActionEngine.scroll_down(center_x, center_y, clicks=5)
-                            self.vision.clear_cache()
-                            ActionEngine.human_delay(1.5, 2.5)
-
-                if total_sent_home > 0:
-                    logger.info(f"[BOT] Sent a total of {total_sent_home} hero(es) to home.")
+                    if total_home > 0:
+                        logger.info(f"[BOT] Sent a total of {total_home} hero(es) to home.")
             else:
                 work_all_screen = self.vision.capture_screen(force_refresh=True)
                 rest_all_match = self.vision.find_template(
@@ -770,28 +764,8 @@ class BombCryptoBot:
                             "[BOT] Neither 'Work All' nor 'Rest All' button image found."
                         )
 
-            # Step 4: Close Heroes Modal
-            close_screen = self.vision.capture_screen(force_refresh=True)
-            close_match = self.vision.find_template(
-                config.TARGET_IMAGES["close_button"], screen_gray=close_screen
-            )
-            if close_match:
-                logger.info(
-                    f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})..."
-                )
-                ActionEngine.click_match(close_match)
-                self.vision.clear_cache()
-                ActionEngine.human_delay(1.5, 2.5)
-
-            # Step 5: Click screen center to collapse HUD menu
-            center_x = screen.shape[1] // 2
-            center_y = screen.shape[0] // 2
-            logger.info(
-                f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu..."
-            )
-            ActionEngine.click_at(center_x, center_y)
-            self.vision.clear_cache()
-            ActionEngine.human_delay(1.5, 2.5)
+            # Step 4 & 5: Close Heroes Modal and click center
+            self._close_heroes_modal(screen.shape)
 
             self.last_hero_work_time = time.time()
             self.hero_work_cycles_count += 1

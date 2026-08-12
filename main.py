@@ -1,24 +1,23 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import signal
 import sys
 import time
-import types
-
-if "mouseinfo" not in sys.modules:
-    dummy_mouseinfo = types.ModuleType("mouseinfo")
-    dummy_mouseinfo.MouseInfoWindow = lambda *a, **k: None
-    sys.modules["mouseinfo"] = dummy_mouseinfo
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
+from modules import ensure_mouseinfo_mocked
 from modules.bot_logic import BombCryptoBot
 from modules.browser import BrowserManager
 from modules.diagnostics import SystemDiagnostic, run_setup_wizard
 from modules.logger import logger, setup_logging
 from modules.notifications import NotificationManager
+
+ensure_mouseinfo_mocked()
 
 
 def parse_args():
