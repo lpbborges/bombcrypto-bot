@@ -308,93 +308,74 @@ class BombCryptoBot:
         return False
 
     def handle_login(self) -> bool:
-        """
-        Flexibly handles login/reconnect states without duplicate click spam.
-        """
+        """Flexibly handles login/reconnect states without duplicate click spam."""
         screen = self.vision.capture_screen()
+        if self._try_confirm_profile(screen):
+            return True
+        if self._try_metamask_sign(screen):
+            return True
+        if self._try_metamask_select(screen):
+            return True
+        if self._try_connect_wallet(screen):
+            return True
+        return False
 
-        # Step 1: Check for profile confirmation 'OK' button first
+    def _try_confirm_profile(self, screen) -> bool:
         profile_ok = self.vision.find_template(
             config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen
         )
         if profile_ok:
-            logger.info(
-                f"[BOT] Confirm profile button ('OK') found (Confidence: {profile_ok['confidence']:.2f}). Clicking OK..."
-            )
+            logger.info("[BOT] Confirm profile button ('OK') found. Clicking OK...")
             ActionEngine.click_match(profile_ok)
             self.vision.clear_cache()
             ActionEngine.human_delay(4.0, 6.0)
             self.update_progress()
             return True
+        return False
 
-        # Step 2: Check for MetaMask Sign/Confirm button popup standalone
+    def _try_metamask_sign(self, screen) -> bool:
         metamask_sign = self.vision.find_template(
             config.TARGET_IMAGES["metamask_sign"], screen_gray=screen
         )
         if metamask_sign:
-            logger.info(
-                f"[BOT] MetaMask Sign/Confirm button found (Confidence: {metamask_sign['confidence']:.2f}). Signing transaction..."
-            )
+            logger.info("[BOT] MetaMask Sign/Confirm button found. Signing transaction...")
             ActionEngine.click_match(metamask_sign)
             self.vision.clear_cache()
             ActionEngine.human_delay(5.0, 8.0)
             self.update_progress()
             return True
+        return False
 
-        # Step 3: Check for Select MetaMask modal standalone
+    def _try_metamask_select(self, screen) -> bool:
         wallet_select = self.vision.find_template(
             config.TARGET_IMAGES["select_metamask"], screen_gray=screen
         )
         if wallet_select:
-            logger.info(
-                f"[BOT] Select MetaMask icon found (Confidence: {wallet_select['confidence']:.2f}). Clicking..."
-            )
+            logger.info("[BOT] Select MetaMask icon found. Clicking...")
             ActionEngine.click_match(wallet_select)
             self.vision.clear_cache()
             ActionEngine.human_delay(3.0, 5.0)
             self.update_progress()
             return True
+        return False
 
-        # Step 4: Check for 'Connect Wallet' button
+    def _try_connect_wallet(self, screen) -> bool:
         connect_match = self.vision.find_template(
             config.TARGET_IMAGES["connect_wallet"], screen_gray=screen
         )
         if connect_match:
-            logger.info(
-                f"[BOT] 'Connect Wallet' button found (Confidence: {connect_match['confidence']:.2f}). Initiating login..."
-            )
+            logger.info("[BOT] 'Connect Wallet' button found. Initiating login...")
             ActionEngine.click_match(connect_match)
             self.vision.clear_cache()
             ActionEngine.human_delay(4.0, 6.0)
             self.update_progress()
 
-            # Check if wallet selection modal pops up immediately after
             screen_after = self.vision.capture_screen(force_refresh=True)
-            wallet_select = self.vision.find_template(
-                config.TARGET_IMAGES["select_metamask"], screen_gray=screen_after
-            )
-            if wallet_select:
-                logger.info(
-                    f"[BOT] Select MetaMask icon found (Confidence: {wallet_select['confidence']:.2f}). Clicking..."
-                )
-                ActionEngine.click_match(wallet_select)
-                self.vision.clear_cache()
-                ActionEngine.human_delay(3.0, 5.0)
+            self._try_metamask_select(screen_after)
 
-            # Check for MetaMask Sign button popup
-            metamask_sign = self.vision.find_template(
-                config.TARGET_IMAGES["metamask_sign"], screen_gray=screen_after
-            )
-            if metamask_sign:
-                logger.info(
-                    f"[BOT] MetaMask Sign button found (Confidence: {metamask_sign['confidence']:.2f}). Signing transaction..."
-                )
-                ActionEngine.click_match(metamask_sign)
-                self.vision.clear_cache()
-                ActionEngine.human_delay(5.0, 8.0)
-
+            screen_after_sign = self.vision.capture_screen(force_refresh=True)
+            self._try_metamask_sign(screen_after_sign)
             return True
-
         return False
 
     def _scan_and_work_eligible_heroes(
@@ -408,168 +389,165 @@ class BombCryptoBot:
     ) -> int:
         """Processes a single scroll pass during hero work scanning."""
         work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
-        if work_all_screen_color.ndim == 3:
-            work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
-        else:
-            work_all_screen = work_all_screen_color
+        work_all_screen = self._convert_to_gray(work_all_screen_color)
 
-        # 1. Locate all green WORK buttons on current modal screen
-        work_button_matches = []
-        if "work_button" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["work_button"]
-        ):
-            work_button_matches = self.vision.find_unique_matches(
-                config.TARGET_IMAGES["work_button"],
-                screen_gray=work_all_screen,
-                threshold=0.65,
-                min_distance=25,
-            )
+        work_button_matches = self._find_work_button_matches(work_all_screen)
+        stamina_matches = self._find_stamina_matches(work_all_screen, stamina_targets)
 
-        # 2. Also locate stamina bar matches from targets/staminas/
-        stamina_paths = [t[0] for t in stamina_targets if os.path.exists(t[0])]
-        min_dist = getattr(config, "STAMINA_MIN_DISTANCE", 30)
+        eligible_clicks = self._calculate_eligible_clicks(
+            work_button_matches, stamina_matches, work_all_screen_color, min_stamina
+        )
 
-        if stamina_paths:
-            stamina_matches = self.vision.find_unique_matches(
-                stamina_paths, screen_gray=work_all_screen, threshold=0.82, min_distance=min_dist
-            )
-        else:
-            # Fallback to full_bar and 80_bar if no staminas folder targets matched
-            fallback_paths = [
-                config.TARGET_IMAGES[key]
-                for key in ["full_bar", "80_bar"]
-                if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key])
-            ]
-            stamina_matches = self.vision.find_unique_matches(
-                fallback_paths, screen_gray=work_all_screen, min_distance=min_dist
-            )
-        eligible_clicks = []
+        sent_count = self._execute_clicks(eligible_clicks, scroll_pass, min_stamina)
 
-        # Method A: For each green WORK button, check stamina on the same row
-        if work_button_matches:
-            for w_btn in work_button_matches:
-                w_x, w_y = w_btn["x"], w_btn["y"]
-                has_bar_match = any(
-                    abs(s_m["y"] - w_y) <= getattr(config, "STAMINA_Y_TOLERANCE", 25)
-                    and s_m["x"] < w_x
-                    for s_m in stamina_matches
-                )
-
-                crop_xmin = max(0, w_x - getattr(config, "STAMINA_CROP_XMIN_OFFSET", 180))
-                crop_xmax = max(0, w_x - getattr(config, "STAMINA_CROP_XMAX_OFFSET", 45))
-                crop_ymin = max(0, w_y - getattr(config, "STAMINA_CROP_Y_OFFSET", 18))
-                crop_ymax = min(
-                    work_all_screen_color.shape[0],
-                    w_y + getattr(config, "STAMINA_CROP_Y_OFFSET", 18),
-                )
-
-                stamina_crop = work_all_screen_color[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
-                fill_pct = calculate_stamina_percentage(stamina_crop)
-
-                if fill_pct >= (min_stamina - 2.0) or has_bar_match:
-                    eligible_clicks.append((w_x, w_y))
-
-        # Method B: Fallback if work_button template didn't match
-        elif stamina_matches:
-            for s_m in stamina_matches:
-                eligible_clicks.append((s_m["x"] + 140, s_m["y"]))
-
-        # Filter unique click points
-        unique_clicks = []
-        for c_x, c_y in eligible_clicks:
-            if not any(math.hypot(c_x - u_x, c_y - u_y) < 20 for u_x, u_y in unique_clicks):
-                unique_clicks.append((c_x, c_y))
-
-        sent_count = 0
-        if unique_clicks:
-            logger.info(
-                f"[BOT] Pass {scroll_pass + 1}: Found {len(unique_clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
-            )
-            for click_x, click_y in unique_clicks:
-                ActionEngine.click_at(click_x, click_y)
-                sent_count += 1
-                ActionEngine.human_delay(0.5, 1.2)
-
-            self.vision.clear_cache()
-            ActionEngine.human_delay(1.0, 2.0)
-
-        # Scan Home candidates on current pass for full-menu prioritization
         if (
             enable_home
             and "available_home" in config.TARGET_IMAGES
             and os.path.exists(config.TARGET_IMAGES["available_home"])
         ):
-            if unique_clicks:
+            if sent_count > 0:
                 work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
-                if work_all_screen_color.ndim == 3:
-                    work_all_screen = cv2.cvtColor(work_all_screen_color, cv2.COLOR_BGR2GRAY)
-                else:
-                    work_all_screen = work_all_screen_color
-
-            remaining_work_matches = []
-            if "work_button" in config.TARGET_IMAGES and os.path.exists(
-                config.TARGET_IMAGES["work_button"]
-            ):
-                remaining_work_matches = self.vision.find_unique_matches(
-                    config.TARGET_IMAGES["work_button"],
-                    screen_gray=work_all_screen,
-                    threshold=0.70,
-                    min_distance=25,
-                )
-
-            home_button_matches = self.vision.find_unique_matches(
-                config.TARGET_IMAGES["available_home"],
-                screen_gray=work_all_screen,
-                threshold=0.75,
-                min_distance=25,
+                work_all_screen = self._convert_to_gray(work_all_screen_color)
+            self._scan_home_candidates(
+                work_all_screen, tier_targets, all_home_candidates, scroll_pass
             )
 
-            if home_button_matches and remaining_work_matches:
-                all_tier_matches = []
-                for t_path, t_name, priority in tier_targets:
-                    if os.path.exists(t_path):
-                        t_matches = self.vision.find_unique_matches(
-                            t_path, screen_gray=work_all_screen, threshold=0.70, min_distance=20
-                        )
-                        for tm in t_matches:
-                            tm["tier_name"] = t_name
-                            tm["priority"] = priority
-                            all_tier_matches.append(tm)
-
-                for h_btn in home_button_matches:
-                    h_x, h_y = h_btn["x"], h_btn["y"]
-                    is_resting = any(
-                        abs(w_btn["y"] - h_y) <= 25 for w_btn in remaining_work_matches
-                    )
-                    if not is_resting:
-                        continue
-
-                    tier_match = next(
-                        (tm for tm in all_tier_matches if abs(tm["y"] - h_y) <= 30),
-                        None,
-                    )
-                    if tier_match and tier_match["priority"] > 0:
-                        all_home_candidates.append(
-                            {
-                                "priority": tier_match["priority"],
-                                "tier_name": tier_match["tier_name"],
-                                "pass": scroll_pass,
-                                "x": h_x,
-                                "y": h_y,
-                            }
-                        )
-
         return sent_count
+
+    def _convert_to_gray(self, screen_color):
+        if screen_color.ndim == 3:
+            return cv2.cvtColor(screen_color, cv2.COLOR_BGR2GRAY)
+        return screen_color
+
+    def _find_work_button_matches(self, screen_gray):
+        if "work_button" in config.TARGET_IMAGES and os.path.exists(
+            config.TARGET_IMAGES["work_button"]
+        ):
+            return self.vision.find_unique_matches(
+                config.TARGET_IMAGES["work_button"],
+                screen_gray=screen_gray,
+                threshold=0.65,
+                min_distance=25,
+            )
+        return []
+
+    def _find_stamina_matches(self, screen_gray, stamina_targets):
+        stamina_paths = [t[0] for t in stamina_targets if os.path.exists(t[0])]
+        min_dist = getattr(config, "STAMINA_MIN_DISTANCE", 30)
+
+        if stamina_paths:
+            return self.vision.find_unique_matches(
+                stamina_paths, screen_gray=screen_gray, threshold=0.82, min_distance=min_dist
+            )
+
+        fallback_paths = [
+            config.TARGET_IMAGES[k]
+            for k in ["full_bar", "80_bar"]
+            if k in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[k])
+        ]
+        return self.vision.find_unique_matches(
+            fallback_paths, screen_gray=screen_gray, min_distance=min_dist
+        )
+
+    def _calculate_eligible_clicks(self, work_buttons, stamina_matches, screen_color, min_stamina):
+        eligible = []
+        if work_buttons:
+            for w_btn in work_buttons:
+                w_x, w_y = w_btn["x"], w_btn["y"]
+                has_bar = any(
+                    abs(s["y"] - w_y) <= getattr(config, "STAMINA_Y_TOLERANCE", 25) and s["x"] < w_x
+                    for s in stamina_matches
+                )
+
+                c_xmin = max(0, w_x - getattr(config, "STAMINA_CROP_XMIN_OFFSET", 180))
+                c_xmax = max(0, w_x - getattr(config, "STAMINA_CROP_XMAX_OFFSET", 45))
+                c_ymin = max(0, w_y - getattr(config, "STAMINA_CROP_Y_OFFSET", 18))
+                c_ymax = min(
+                    screen_color.shape[0], w_y + getattr(config, "STAMINA_CROP_Y_OFFSET", 18)
+                )
+
+                crop = screen_color[c_ymin:c_ymax, c_xmin:c_xmax]
+                pct = calculate_stamina_percentage(crop)
+
+                if pct >= (min_stamina - 2.0) or has_bar:
+                    eligible.append((w_x, w_y))
+        elif stamina_matches:
+            for s_m in stamina_matches:
+                eligible.append((s_m["x"] + 140, s_m["y"]))
+
+        unique = []
+        for x, y in eligible:
+            if not any(math.hypot(x - u_x, y - u_y) < 20 for u_x, u_y in unique):
+                unique.append((x, y))
+        return unique
+
+    def _execute_clicks(self, clicks, scroll_pass, min_stamina):
+        if not clicks:
+            return 0
+        logger.info(
+            f"[BOT] Pass {scroll_pass + 1}: Found {len(clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
+        )
+        for x, y in clicks:
+            ActionEngine.click_at(x, y)
+            ActionEngine.human_delay(0.5, 1.2)
+        self.vision.clear_cache()
+        ActionEngine.human_delay(1.0, 2.0)
+        return len(clicks)
+
+    def _scan_home_candidates(self, screen_gray, tier_targets, all_home_candidates, scroll_pass):
+        remaining_work = self._find_work_button_matches(screen_gray)
+        home_buttons = self.vision.find_unique_matches(
+            config.TARGET_IMAGES["available_home"],
+            screen_gray=screen_gray,
+            threshold=0.75,
+            min_distance=25,
+        )
+
+        if not home_buttons or not remaining_work:
+            return
+
+        all_tier_matches = []
+        for path, name, prio in tier_targets:
+            if os.path.exists(path):
+                matches = self.vision.find_unique_matches(
+                    path, screen_gray=screen_gray, threshold=0.70, min_distance=20
+                )
+                for m in matches:
+                    m.update({"tier_name": name, "priority": prio})
+                    all_tier_matches.append(m)
+
+        for h_btn in home_buttons:
+            h_y = h_btn["y"]
+            if not any(abs(w["y"] - h_y) <= 25 for w in remaining_work):
+                continue
+
+            tier = next((tm for tm in all_tier_matches if abs(tm["y"] - h_y) <= 30), None)
+            if tier and tier["priority"] > 0:
+                all_home_candidates.append(
+                    {
+                        "priority": tier["priority"],
+                        "tier_name": tier["tier_name"],
+                        "pass": scroll_pass,
+                        "x": h_btn["x"],
+                        "y": h_y,
+                    }
+                )
 
     def _execute_home_strategy(
         self, max_scroll_passes: int, all_home_candidates: list[dict], screen_shape: tuple
     ) -> int:
         """Executes Phase 2 global home placement across modal scroll passes."""
+        self._prepare_home_candidates(all_home_candidates)
+        self._scroll_to_top(max_scroll_passes, screen_shape)
+        return self._process_home_passes(max_scroll_passes, all_home_candidates, screen_shape)
+
+    def _prepare_home_candidates(self, all_home_candidates: list[dict]):
         all_home_candidates.sort(key=lambda c: c["priority"], reverse=True)
         logger.info(
             f"[BOT] Full menu scan complete. Discovered {len(all_home_candidates)} resting high-tier candidate(s) for home."
         )
 
+    def _scroll_to_top(self, max_scroll_passes: int, screen_shape: tuple):
         center_x = screen_shape[1] // 2
         center_y = screen_shape[0] // 2
         for _ in range(max_scroll_passes - 1):
@@ -578,8 +556,13 @@ class BombCryptoBot:
         self.vision.clear_cache()
         ActionEngine.human_delay(1.5, 2.5)
 
+    def _process_home_passes(
+        self, max_scroll_passes: int, all_home_candidates: list[dict], screen_shape: tuple
+    ) -> int:
         total_sent_home = 0
         home_full = False
+        center_x = screen_shape[1] // 2
+        center_y = screen_shape[0] // 2
 
         for target_pass in range(max_scroll_passes):
             if home_full:
@@ -587,43 +570,8 @@ class BombCryptoBot:
 
             pass_candidates = [c for c in all_home_candidates if c["pass"] == target_pass]
             if pass_candidates:
-                pass_screen = self.vision.capture_screen(force_refresh=True)
-                home_button_matches = self.vision.find_unique_matches(
-                    config.TARGET_IMAGES["available_home"],
-                    screen_gray=pass_screen,
-                    threshold=0.75,
-                    min_distance=25,
-                )
-
-                if (
-                    not home_button_matches
-                    and "without_space_home" in config.TARGET_IMAGES
-                    and os.path.exists(config.TARGET_IMAGES["without_space_home"])
-                ):
-                    no_space = self.vision.find_template(
-                        config.TARGET_IMAGES["without_space_home"],
-                        screen_gray=pass_screen,
-                    )
-                    if no_space:
-                        logger.info("[BOT] Home is full or unavailable.")
-                        home_full = True
-
-                if home_button_matches and not home_full:
-                    for cand in pass_candidates:
-                        matched_btn = next(
-                            (b for b in home_button_matches if abs(b["y"] - cand["y"]) <= 25),
-                            None,
-                        )
-                        click_x = matched_btn["x"] if matched_btn else cand["x"]
-                        click_y = matched_btn["y"] if matched_btn else cand["y"]
-
-                        ActionEngine.click_at(click_x, click_y)
-                        total_sent_home += 1
-                        logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
-                        ActionEngine.human_delay(0.5, 1.2)
-
-                    self.vision.clear_cache()
-                    ActionEngine.human_delay(1.0, 2.0)
+                sent, home_full = self._process_home_candidates_on_pass(pass_candidates)
+                total_sent_home += sent
 
             if target_pass < max_scroll_passes - 1:
                 ActionEngine.scroll_down(center_x, center_y, clicks=5)
@@ -631,6 +579,46 @@ class BombCryptoBot:
                 ActionEngine.human_delay(1.5, 2.5)
 
         return total_sent_home
+
+    def _process_home_candidates_on_pass(self, pass_candidates: list[dict]) -> tuple[int, bool]:
+        pass_screen = self.vision.capture_screen(force_refresh=True)
+        home_button_matches = self.vision.find_unique_matches(
+            config.TARGET_IMAGES["available_home"],
+            screen_gray=pass_screen,
+            threshold=0.75,
+            min_distance=25,
+        )
+
+        home_full = False
+        if (
+            not home_button_matches
+            and "without_space_home" in config.TARGET_IMAGES
+            and os.path.exists(config.TARGET_IMAGES["without_space_home"])
+        ):
+            if self.vision.find_template(
+                config.TARGET_IMAGES["without_space_home"], screen_gray=pass_screen
+            ):
+                logger.info("[BOT] Home is full or unavailable.")
+                home_full = True
+
+        sent = 0
+        if home_button_matches and not home_full:
+            for cand in pass_candidates:
+                matched_btn = next(
+                    (b for b in home_button_matches if abs(b["y"] - cand["y"]) <= 25), None
+                )
+                click_x = matched_btn["x"] if matched_btn else cand["x"]
+                click_y = matched_btn["y"] if matched_btn else cand["y"]
+
+                ActionEngine.click_at(click_x, click_y)
+                sent += 1
+                logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
+                ActionEngine.human_delay(0.5, 1.2)
+
+            self.vision.clear_cache()
+            ActionEngine.human_delay(1.0, 2.0)
+
+        return sent, home_full
 
     def _close_heroes_modal(self, screen_shape: tuple) -> None:
         """Closes Heroes modal menu and clicks screen center."""
@@ -666,116 +654,116 @@ class BombCryptoBot:
         logger.info("[BOT] Attempting to send heroes to work...")
         screen = self.vision.capture_screen()
 
-        # Step 1: Find & click bottom arrow to open menu
+        screen = self._open_bottom_menu(screen)
+
+        if not self._open_heroes_menu(screen):
+            logger.info("[BOT] Heroes button not visible on screen.")
+            return False
+
+        if (
+            getattr(config, "WORK_ONLY_STAMINA", True)
+            or getattr(config, "HERO_WORK_MODE", "stamina") != "all"
+        ):
+            self._process_heroes_by_stamina(screen)
+        else:
+            self._process_work_all_heroes()
+
+        self._close_heroes_modal(screen.shape)
+
+        self.last_hero_work_time = time.time()
+        self.hero_work_cycles_count += 1
+        self.update_progress()
+        NotificationManager.notify_hero_cycle("Heroes sent to work successfully.")
+        return True
+
+    def _open_bottom_menu(self, screen):
         bottom_arrow_match = self.vision.find_template(
             config.TARGET_IMAGES["bottom_arrow"], screen_gray=screen
         )
         if bottom_arrow_match:
-            logger.info(
-                f"[BOT] Found bottom arrow menu button (Confidence: {bottom_arrow_match['confidence']:.2f}). Opening menu..."
-            )
+            logger.info("[BOT] Found bottom arrow menu button. Opening menu...")
             ActionEngine.click_match(bottom_arrow_match)
             self.vision.clear_cache()
             ActionEngine.human_delay(2.0, 4.0)
-            screen = self.vision.capture_screen(force_refresh=True)
+            return self.vision.capture_screen(force_refresh=True)
         else:
             logger.info(
                 "[BOT] Bottom arrow menu button not found directly; checking if menu is already open..."
             )
+            return screen
 
-        # Step 2: Click Heroes Button inside opened menu
+    def _open_heroes_menu(self, screen) -> bool:
         heroes_match = self.vision.find_template(
             config.TARGET_IMAGES["heroes_button"], screen_gray=screen
         )
         if heroes_match:
-            logger.info(
-                f"[BOT] Found Heroes button inside menu (Confidence: {heroes_match['confidence']:.2f}). Opening heroes list..."
-            )
+            logger.info("[BOT] Found Heroes button inside menu. Opening heroes list...")
             ActionEngine.click_match(heroes_match)
             self.vision.clear_cache()
             ActionEngine.human_delay(2.5, 4.5)
-
-            # Step 3: Check hero action buttons inside heroes modal
-            if (
-                getattr(config, "WORK_ONLY_STAMINA", True)
-                or getattr(config, "HERO_WORK_MODE", "stamina") != "all"
-            ):
-                min_stamina = getattr(config, "HERO_MIN_STAMINA", 60.0)
-                max_scroll_passes = getattr(config, "HERO_MODAL_MAX_SCROLLS", 4)
-                enable_home = getattr(config, "ENABLE_HOME_STRATEGY", True)
-                logger.info(f"[BOT] Scanning hero list for stamina >= {min_stamina:.0f}%...")
-
-                stamina_targets = config.load_stamina_targets(min_stamina)
-                tier_targets = config.load_tier_targets() if enable_home else []
-                total_sent = 0
-                all_home_candidates = []
-
-                for scroll_pass in range(max_scroll_passes):
-                    sent = self._scan_and_work_eligible_heroes(
-                        scroll_pass,
-                        min_stamina,
-                        stamina_targets,
-                        enable_home,
-                        tier_targets,
-                        all_home_candidates,
-                    )
-                    total_sent += sent
-                    if scroll_pass < max_scroll_passes - 1:
-                        center_x = screen.shape[1] // 2
-                        center_y = screen.shape[0] // 2
-                        ActionEngine.scroll_down(center_x, center_y, clicks=5)
-                        self.vision.clear_cache()
-                        ActionEngine.human_delay(1.5, 2.5)
-
-                if total_sent > 0:
-                    logger.info(f"[BOT] Sent a total of {total_sent} hero(es) to work.")
-                else:
-                    logger.warning(
-                        f"[BOT] No heroes with stamina >= {min_stamina:.0f}% found in list."
-                    )
-
-                if enable_home and all_home_candidates:
-                    total_home = self._execute_home_strategy(
-                        max_scroll_passes, all_home_candidates, screen.shape
-                    )
-                    if total_home > 0:
-                        logger.info(f"[BOT] Sent a total of {total_home} hero(es) to home.")
-            else:
-                work_all_screen = self.vision.capture_screen(force_refresh=True)
-                rest_all_match = self.vision.find_template(
-                    config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
-                )
-                if rest_all_match:
-                    logger.info(
-                        f"[BOT] 'Rest All' button detected (Confidence: {rest_all_match['confidence']:.2f}). All heroes are already working, taking no action."
-                    )
-                else:
-                    work_all_match = self.vision.find_template(
-                        config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
-                    )
-                    if work_all_match:
-                        logger.info(
-                            f"[BOT] Clicking 'Work All' button (Confidence: {work_all_match['confidence']:.2f})..."
-                        )
-                        ActionEngine.click_match(work_all_match)
-                        self.vision.clear_cache()
-                        ActionEngine.human_delay(2.0, 3.5)
-                    else:
-                        logger.warning(
-                            "[BOT] Neither 'Work All' nor 'Rest All' button image found."
-                        )
-
-            # Step 4 & 5: Close Heroes Modal and click center
-            self._close_heroes_modal(screen.shape)
-
-            self.last_hero_work_time = time.time()
-            self.hero_work_cycles_count += 1
-            self.update_progress()
-            NotificationManager.notify_hero_cycle("Heroes sent to work successfully.")
             return True
-
-        logger.info("[BOT] Heroes button not visible on screen.")
         return False
+
+    def _process_heroes_by_stamina(self, screen):
+        min_stamina = getattr(config, "HERO_MIN_STAMINA", 60.0)
+        max_scroll_passes = getattr(config, "HERO_MODAL_MAX_SCROLLS", 4)
+        enable_home = getattr(config, "ENABLE_HOME_STRATEGY", True)
+        logger.info(f"[BOT] Scanning hero list for stamina >= {min_stamina:.0f}%...")
+
+        stamina_targets = config.load_stamina_targets(min_stamina)
+        tier_targets = config.load_tier_targets() if enable_home else []
+        total_sent = 0
+        all_home_candidates = []
+
+        for scroll_pass in range(max_scroll_passes):
+            sent = self._scan_and_work_eligible_heroes(
+                scroll_pass,
+                min_stamina,
+                stamina_targets,
+                enable_home,
+                tier_targets,
+                all_home_candidates,
+            )
+            total_sent += sent
+            if scroll_pass < max_scroll_passes - 1:
+                center_x = screen.shape[1] // 2
+                center_y = screen.shape[0] // 2
+                ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                self.vision.clear_cache()
+                ActionEngine.human_delay(1.5, 2.5)
+
+        if total_sent > 0:
+            logger.info(f"[BOT] Sent a total of {total_sent} hero(es) to work.")
+        else:
+            logger.warning(f"[BOT] No heroes with stamina >= {min_stamina:.0f}% found in list.")
+
+        if enable_home and all_home_candidates:
+            total_home = self._execute_home_strategy(
+                max_scroll_passes, all_home_candidates, screen.shape
+            )
+            if total_home > 0:
+                logger.info(f"[BOT] Sent a total of {total_home} hero(es) to home.")
+
+    def _process_work_all_heroes(self):
+        work_all_screen = self.vision.capture_screen(force_refresh=True)
+        rest_all_match = self.vision.find_template(
+            config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
+        )
+        if rest_all_match:
+            logger.info(
+                "[BOT] 'Rest All' button detected. All heroes are already working, taking no action."
+            )
+        else:
+            work_all_match = self.vision.find_template(
+                config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
+            )
+            if work_all_match:
+                logger.info("[BOT] Clicking 'Work All' button...")
+                ActionEngine.click_match(work_all_match)
+                self.vision.clear_cache()
+                ActionEngine.human_delay(2.0, 3.5)
+            else:
+                logger.warning("[BOT] Neither 'Work All' nor 'Rest All' button image found.")
 
     def enter_treasure_hunt(self) -> bool:
         """
@@ -858,134 +846,116 @@ class BombCryptoBot:
         return False
 
     def run_cycle(self):
-        """
-        FSM-driven main decision cycle for the bot.
-        """
+        """FSM-driven main decision cycle for the bot."""
         self.cycles_completed += 1
         logger.info(
             f"--- [BOT CYCLE #{self.cycles_completed} START - State: {self.state.name}] ---"
         )
         logger.debug(f"[METRICS] {self.get_stats_summary()}")
-
-        # Invalidate frame cache at start of cycle
         self.vision.clear_cache()
 
-        # Step 1: Check anti-stuck timeout recovery
-        if self.check_stuck_timeout():
+        if self.check_stuck_timeout() or self.state == BotState.STUCK_RECOVERY:
             self.handle_stuck_recovery()
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 2: Handle STUCK_RECOVERY state directly if set
-        if self.state == BotState.STUCK_RECOVERY:
-            self.handle_stuck_recovery()
-            logger.info("--- [BOT CYCLE END] ---")
-            return
-
-        # Step 3: Identify current screen to determine next action
         screen_type, action_name = self.determine_next_action()
         logger.info(f"[BOT DECISION] Screen: {screen_type.name} -> Next Action: {action_name}")
 
-        # Step 4: Execute action based on identified screen state
-        if action_name == "handle_captcha":
-            self.handle_captcha()
+        if self._execute_screen_action(screen_type, action_name):
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        if action_name == "handle_error":
-            self.set_state(BotState.CHECKING_ERRORS)
-            self.check_errors_or_disconnect()
-            logger.info("--- [BOT CYCLE END] ---")
-            return
-
-        if action_name == "handle_login":
-            self.set_state(BotState.LOGGING_IN)
-            self.handle_login()
-            logger.info("--- [BOT CYCLE END] ---")
-            return
-
-        if action_name == "handle_map_cleared":
-            self.check_map_cleared()
-            logger.info("--- [BOT CYCLE END] ---")
-            return
-
-        if action_name == "enter_treasure_hunt":
-            if self.enter_treasure_hunt():
-                self.set_state(BotState.RESTING)
-            logger.info("--- [BOT CYCLE END] ---")
-            return
-
-        # Step 5: Check Periodic Refresh requirement (Inner Bot periodic unstuck)
         if self.check_periodic_refresh():
             logger.info("--- [BOT CYCLE END] ---")
             return
 
-        # Step 6: Fallback scans if screen was UNKNOWN but specific elements might be present
-        if screen_type == GameScreen.UNKNOWN:
-            if self.check_errors_or_disconnect():
-                self.set_state(BotState.CHECKING_ERRORS)
-                logger.info("--- [BOT CYCLE END] ---")
-                return
+        if screen_type == GameScreen.UNKNOWN and self._handle_unknown_screen():
+            logger.info("--- [BOT CYCLE END] ---")
+            return
 
-            if self.handle_login():
-                self.set_state(BotState.LOGGING_IN)
-                logger.info("--- [BOT CYCLE END] ---")
-                return
+        self._execute_fsm_work_cycle()
+        logger.info("--- [BOT CYCLE END] ---")
 
-            if self.check_map_cleared():
-                logger.info("--- [BOT CYCLE END] ---")
-                return
+    def _execute_screen_action(self, screen_type, action_name) -> bool:
+        if action_name == "handle_captcha":
+            self.handle_captcha()
+            return True
+        if action_name == "handle_error":
+            self.set_state(BotState.CHECKING_ERRORS)
+            self.check_errors_or_disconnect()
+            return True
+        if action_name == "handle_login":
+            self.set_state(BotState.LOGGING_IN)
+            self.handle_login()
+            return True
+        if action_name == "handle_map_cleared":
+            self.check_map_cleared()
+            return True
+        if action_name == "enter_treasure_hunt":
+            if self.enter_treasure_hunt():
+                self.set_state(BotState.RESTING)
+            return True
+        return False
 
-        # Step 7: FSM Work & Resting Cycle Logic
+    def _handle_unknown_screen(self) -> bool:
+        if self.check_errors_or_disconnect():
+            self.set_state(BotState.CHECKING_ERRORS)
+            return True
+        if self.handle_login():
+            self.set_state(BotState.LOGGING_IN)
+            return True
+        if self.check_map_cleared():
+            return True
+        return False
+
+    def _execute_fsm_work_cycle(self):
         only_error_refresh = getattr(config, "ONLY_REFRESH_ON_ERROR", False)
         hero_work_enabled = getattr(config, "ENABLE_HERO_WORK_ACTIONS", True)
 
         if only_error_refresh or not hero_work_enabled:
             mode_desc = "Error-Only Refresh" if only_error_refresh else "Inner Bot Monitoring"
             logger.info(
-                f"[BOT] State: {self.state.name} | Inner Bot active ({mode_desc}). "
-                f"Monitoring for errors or stuck state..."
+                f"[BOT] State: {self.state.name} | Inner Bot active ({mode_desc}). Monitoring for errors or stuck state..."
             )
             if self.state != BotState.RESTING and self.enter_treasure_hunt():
                 self.set_state(BotState.RESTING)
-
             self.check_idle_jitter()
         else:
-            if self.last_hero_work_time == 0:
-                logger.info("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
-                self.set_state(BotState.SENDING_HEROES)
-                if self.send_heroes_to_work():
-                    self.set_state(BotState.ENTERING_MAP)
-                    self.enter_treasure_hunt()
-                    self.set_state(BotState.RESTING)
+            self._handle_active_hero_work()
+
+    def _handle_active_hero_work(self):
+        if self.last_hero_work_time == 0:
+            logger.info("[BOT] Initial work cycle starting. Transitioning to SENDING_HEROES...")
+            self._transition_and_send_heroes()
+        else:
+            elapsed_seconds = time.time() - self.last_hero_work_time
+            interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
+
+            if elapsed_seconds >= interval_seconds:
+                elapsed_str = format_duration(elapsed_seconds)
+                logger.info(
+                    f"[BOT] Work interval reached ({elapsed_str} elapsed). Transitioning to SENDING_HEROES..."
+                )
+                self._transition_and_send_heroes()
             else:
-                elapsed_seconds = time.time() - self.last_hero_work_time
-                interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
+                self._wait_for_next_cycle(elapsed_seconds, interval_seconds)
 
-                if elapsed_seconds >= interval_seconds:
-                    elapsed_str = format_duration(elapsed_seconds)
-                    logger.info(
-                        f"[BOT] Work interval reached ({elapsed_str} elapsed). Transitioning to SENDING_HEROES..."
-                    )
-                    self.set_state(BotState.SENDING_HEROES)
-                    if self.send_heroes_to_work():
-                        self.set_state(BotState.ENTERING_MAP)
-                        self.enter_treasure_hunt()
-                        self.set_state(BotState.RESTING)
-                else:
-                    remaining_seconds = interval_seconds - elapsed_seconds
-                    elapsed_str = format_duration(elapsed_seconds)
-                    remaining_str = format_duration(remaining_seconds)
-                    logger.info(
-                        f"[BOT] State: {self.state.name} | Heroes working/resting ({elapsed_str} elapsed). "
-                        f"Next work cycle in {remaining_str}."
-                    )
+    def _transition_and_send_heroes(self):
+        self.set_state(BotState.SENDING_HEROES)
+        if self.send_heroes_to_work():
+            self.set_state(BotState.ENTERING_MAP)
+            self.enter_treasure_hunt()
+            self.set_state(BotState.RESTING)
 
-                    # Ensure we are inside Treasure Hunt map
-                    if self.state != BotState.RESTING and self.enter_treasure_hunt():
-                        self.set_state(BotState.RESTING)
+    def _wait_for_next_cycle(self, elapsed_seconds, interval_seconds):
+        remaining_seconds = interval_seconds - elapsed_seconds
+        elapsed_str = format_duration(elapsed_seconds)
+        remaining_str = format_duration(remaining_seconds)
+        logger.info(
+            f"[BOT] State: {self.state.name} | Heroes working/resting ({elapsed_str} elapsed). Next work cycle in {remaining_str}."
+        )
 
-                    # Execute anti-AFK idle jitter if resting
-                    self.check_idle_jitter()
-
-        logger.info("--- [BOT CYCLE END] ---")
+        if self.state != BotState.RESTING and self.enter_treasure_hunt():
+            self.set_state(BotState.RESTING)
+        self.check_idle_jitter()

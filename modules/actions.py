@@ -469,12 +469,12 @@ class ActionEngine:
         if UINPUT_MOUSE:
             try:
                 ActionEngine.move_mouse_bezier(start_x, start_y, start_x, start_y, duration=0.05)
-                UINPUT_MOUSE.write(evdev.EV_KEY, evdev.BTN_LEFT, 1)
+                UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 1)
                 UINPUT_MOUSE.syn()
                 time.sleep(0.05)
                 ActionEngine.move_mouse_bezier(start_x, start_y, end_x, end_y, duration=duration)
                 time.sleep(0.05)
-                UINPUT_MOUSE.write(evdev.EV_KEY, evdev.BTN_LEFT, 0)
+                UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
                 return
             except Exception as err:
