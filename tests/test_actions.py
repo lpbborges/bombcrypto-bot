@@ -87,19 +87,32 @@ class TestActionEngine(unittest.TestCase):
         self.assertLessEqual(abs(target_y - 500), 15)
         mock_bezier.assert_called_once()
 
+    @patch("modules.actions.HAS_HYPRCTL", False)
+    @patch("modules.actions.HAS_XDOTOOL", False)
+    @patch("modules.actions.HAS_YDOTOOL", False)
     @patch("modules.actions.UINPUT_MOUSE", None)
     @patch("pyautogui.moveTo")
     @patch("pyautogui.mouseDown")
     @patch("pyautogui.mouseUp")
-    def test_click_at_pyautogui_fallback(self, mock_mouseup, mock_mousedown, mock_moveto):
+    @patch("modules.actions.ActionEngine.move_mouse_bezier")
+    def test_click_at_pyautogui_fallback(
+        self, mock_bezier, mock_mouseup, mock_mousedown, mock_moveto
+    ):
         """Tests click_at coordinate targeting using pyautogui fallback when uinput is disabled."""
+        self.action_engine.config.use_bezier_curves = False
         self.action_engine.click_at(100, 200, offset=0)
         mock_mousedown.assert_called_once()
         mock_mouseup.assert_called_once()
 
-    def test_click_at_uinput(self):
+    @patch("modules.actions.HAS_HYPRCTL", False)
+    @patch("modules.actions.HAS_XDOTOOL", False)
+    @patch("modules.actions.HAS_YDOTOOL", False)
+    @patch("modules.actions.ActionEngine.move_mouse_bezier")
+    @patch("pyautogui.moveTo")
+    def test_click_at_uinput(self, mock_moveto, mock_bezier):
         """Tests click_at when uinput hardware device is available."""
         mock_uinput = MagicMock()
+        self.action_engine.config.use_bezier_curves = False
         with patch("modules.actions.UINPUT_MOUSE", mock_uinput):
             self.action_engine.click_at(100, 200, offset=0)
             self.assertEqual(mock_uinput.write.call_count, 2)
@@ -144,6 +157,7 @@ class TestActionEngine(unittest.TestCase):
     @patch("modules.actions.ActionEngine.human_delay")
     def test_refresh_page_f5_mode(self, mock_delay, mock_press):
         """Tests refresh_page uses F5 key when DIRECT_LANDING_MODE is False."""
+        pass
 
     @patch("modules.actions.ActionEngine.drag_scroll")
     def test_scroll_down_invokes_drag_scroll(self, mock_drag):
@@ -152,6 +166,7 @@ class TestActionEngine(unittest.TestCase):
         # Should drag UP: start at 500+100=600, end at 500-100=400
         mock_drag.assert_called_once_with(500, 600, 500, 400, duration=0.4)
 
+    @patch("modules.actions.HAS_XDOTOOL", False)
     @patch("modules.actions.HAS_HYPRCTL", False)
     @patch("modules.actions.UINPUT_MOUSE", None)
     @patch("pyautogui.moveTo")

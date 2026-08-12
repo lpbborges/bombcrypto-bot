@@ -18,14 +18,16 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         BrowserManager.config = BotConfig()
         SystemDiagnostic.config = BotConfig()
         NotificationManager.config = BotConfig()
-        from modules.browser import BrowserManager
-        from modules.diagnostics import SystemDiagnostic
-        from modules.notifications import NotificationManager
 
-        BrowserManager.config = BotConfig()
-        SystemDiagnostic.config = BotConfig()
-        NotificationManager.config = BotConfig()
-        self.bot = BombCryptoBot(BotConfig())
+        self.focus_patcher = patch("modules.browser.BrowserManager.focus_game_window")
+        self.focus_patcher.start()
+
+        test_config = BotConfig()
+        test_config.dry_run = True
+        self.bot = BombCryptoBot(test_config)
+
+    def tearDown(self):
+        self.focus_patcher.stop()
 
     def test_format_duration(self):
         """Tests format_duration string formatting helper."""
@@ -225,8 +227,17 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.click_at")
     @patch("modules.actions.ActionEngine.human_delay")
+    @patch("modules.actions.ActionEngine.scroll_down")
+    @patch("modules.actions.ActionEngine.scroll_up")
     def test_send_heroes_to_work_flow(
-        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
+        self,
+        mock_scroll_up,
+        mock_scroll_down,
+        mock_delay,
+        mock_click_at,
+        mock_click_match,
+        mock_capture,
+        mock_find,
     ):
         """Tests complete hero menu expansion, work all click, close modal, and collapse sequence."""
         dummy_screen = np.zeros((100, 100), dtype=np.uint8)
@@ -258,8 +269,17 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.click_at")
     @patch("modules.actions.ActionEngine.human_delay")
+    @patch("modules.actions.ActionEngine.scroll_down")
+    @patch("modules.actions.ActionEngine.scroll_up")
     def test_send_heroes_to_work_all_already_working(
-        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
+        self,
+        mock_scroll_up,
+        mock_scroll_down,
+        mock_delay,
+        mock_click_at,
+        mock_click_match,
+        mock_capture,
+        mock_find,
     ):
         """Tests that when rest_all_button is detected, the bot does not click rest_all_button."""
         dummy_screen = np.zeros((100, 100), dtype=np.uint8)
@@ -339,8 +359,18 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.click_at")
     @patch("modules.actions.ActionEngine.human_delay")
+    @patch("modules.actions.ActionEngine.scroll_down")
+    @patch("modules.actions.ActionEngine.scroll_up")
     def test_send_heroes_to_work_home_strategy(
-        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
+        self,
+        mock_scroll_up,
+        mock_scroll_down,
+        mock_delay,
+        mock_click_at,
+        mock_click_match,
+        mock_capture,
+        mock_find_all,
+        mock_find,
     ):
         """Tests Home Strategy prioritizes higher tier heroes for home resting."""
         dummy_screen = np.zeros((100, 100), dtype=np.uint8)
@@ -402,8 +432,18 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.click_at")
     @patch("modules.actions.ActionEngine.human_delay")
+    @patch("modules.actions.ActionEngine.scroll_down")
+    @patch("modules.actions.ActionEngine.scroll_up")
     def test_send_heroes_to_work_stamina_mode(
-        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find_all, mock_find
+        self,
+        mock_scroll_up,
+        mock_scroll_down,
+        mock_delay,
+        mock_click_at,
+        mock_click_match,
+        mock_capture,
+        mock_find_all,
+        mock_find,
     ):
         """Tests default stamina mode hero work sequence."""
         dummy_screen = np.zeros((100, 100), dtype=np.uint8)
@@ -442,8 +482,17 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.click_at")
     @patch("modules.actions.ActionEngine.human_delay")
+    @patch("modules.actions.ActionEngine.scroll_down")
+    @patch("modules.actions.ActionEngine.scroll_up")
     def test_send_heroes_to_work_work_all_mode(
-        self, mock_delay, mock_click_at, mock_click_match, mock_capture, mock_find
+        self,
+        mock_scroll_up,
+        mock_scroll_down,
+        mock_delay,
+        mock_click_at,
+        mock_click_match,
+        mock_capture,
+        mock_find,
     ):
         """Tests send_heroes_to_work in explicit work-all mode."""
         dummy_screen = np.zeros((100, 100), dtype=np.uint8)

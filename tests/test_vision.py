@@ -15,8 +15,11 @@ class TestVisionEngine(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
         self.vision = VisionEngine(BotConfig())
+        self.focus_patcher = patch("modules.browser.BrowserManager.focus_game_window")
+        self.focus_patcher.start()
 
     def tearDown(self):
+        self.focus_patcher.stop()
         shutil.rmtree(self.temp_dir)
 
     def test_frame_caching_and_invalidation(self):
