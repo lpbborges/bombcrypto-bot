@@ -48,7 +48,7 @@ except Exception:
         BTN_LEFT = 272
         BTN_RIGHT = 273
 
-    e = DummyEcodes()
+    ecodes = DummyEcodes()
 
 try:
     from evdev import UInput
