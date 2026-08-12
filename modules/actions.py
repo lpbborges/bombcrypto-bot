@@ -255,6 +255,9 @@ class ActionEngine:
         Moves to (x, y) with slight random pixel variation and clicks.
         Supports Bézier trajectory, kernel uinput device, ydotool (Wayland), xdotool (X11), and PyAutoGUI.
         """
+        if offset is None:
+            offset = getattr(self.config, "mouse_click_offset", 3)
+
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
@@ -355,8 +358,8 @@ class ActionEngine:
     def click_match(self, match_result):
         """Convenience method to click a vision match object."""
         if match_result:
-            ActionEngine.click_at(match_result["x"], match_result["y"])
-            ActionEngine.human_delay()
+            self.click_at(match_result["x"], match_result["y"])
+            self.human_delay()
             return True
         return False
 
@@ -376,14 +379,14 @@ class ActionEngine:
             pyautogui.press("enter")
         except Exception as err:
             logger.warning(f"[ACTION] hotkey URL navigation failed ({err}).")
-        ActionEngine.human_delay(5.0, 10.0)
+        self.human_delay(5.0, 10.0)
 
     def refresh_page(
         self,
     ):
         """Performs browser page refresh or direct URL navigation."""
         if self.config.direct_landing_mode:
-            ActionEngine.navigate_to_url(self.config.direct_treasure_url)
+            self.navigate_to_url(self.config.direct_treasure_url)
         else:
             logger.info("[ACTION] Refreshing browser page (F5)...")
             if getattr(self.config, "dry_run", False):
@@ -394,7 +397,7 @@ class ActionEngine:
                 pyautogui.press("f5")
             except Exception as err:
                 logger.warning(f"[ACTION] F5 refresh failed ({err}).")
-            ActionEngine.human_delay(5.0, 10.0)
+            self.human_delay(5.0, 10.0)
 
     def drag_scroll(self, start_x, start_y, end_x, end_y, duration=0.35):
         """

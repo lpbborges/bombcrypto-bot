@@ -135,6 +135,7 @@ All settings can be specified via command-line arguments or saved in a `.env` fi
     - **Recommended Solution**: Switch to **Ubuntu on Xorg**. Log out, click your username, click the gear icon (⚙️) in the bottom-right corner, select **"Ubuntu on Xorg"**, and log in.
     - **Alternative**: Install `gnome-screenshot` (`sudo apt install gnome-screenshot`).
 - **Mouse Input Backends**: Supports PyAutoGUI, `/dev/uinput` kernel device, `ydotool`, `xdotool`, and Hyprland `hyprctl`.
+- **Window Focusing**: To auto-focus the game browser tab before screenshots on X11, install `wmctrl` or `xdotool` (`sudo apt install wmctrl xdotool`). For Wayland users on Hyprland, `hyprctl` is used natively.
 
 ### 🪟 Windows
 - PyAutoGUI standard mouse automation and MSS screen capture work out-of-the-box. Run terminal as Administrator if interacting with elevated browser windows.

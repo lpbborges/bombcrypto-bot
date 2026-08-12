@@ -144,6 +144,36 @@ class TestBrowserManager(unittest.TestCase):
             "https://game.bombcrypto.io/web/v10l/index.html",
         )
 
+    @patch("modules.platform_utils.is_linux", return_value=True)
+    @patch("shutil.which")
+    @patch("subprocess.run")
+    def test_focus_game_window_linux_wmctrl(self, mock_run, mock_which, mock_is_linux):
+        """Tests focusing game window on Linux using wmctrl."""
+        mock_which.side_effect = lambda cmd: cmd == "wmctrl"
+
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "0x02000003  0 brave-browser.Brave-browser user-pc bombcrypto\n"
+        mock_run.return_value = mock_res
+
+        result = BrowserManager.focus_game_window()
+        self.assertTrue(result)
+        mock_run.assert_called_with(["wmctrl", "-i", "-a", "0x02000003"], timeout=2)
+
+    @patch("modules.platform_utils.is_linux", return_value=False)
+    @patch("modules.platform_utils.is_windows", return_value=True)
+    @patch("subprocess.run")
+    def test_focus_game_window_windows(self, mock_run, mock_is_windows, mock_is_linux):
+        """Tests focusing game window on Windows."""
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_run.return_value = mock_res
+
+        result = BrowserManager.focus_game_window()
+        self.assertTrue(result)
+        mock_run.assert_called_once()
+        self.assertIn("Get-Process", mock_run.call_args[0][0][3])
+
 
 if __name__ == "__main__":
     unittest.main()

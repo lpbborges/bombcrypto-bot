@@ -329,6 +329,12 @@ class VisionEngine:
         Supports Wayland (grim), macOS (screencapture), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
         Saves debug_last_screen.png.
         """
+        from modules.browser import BrowserManager
+
+        # Ensure the browser is focused before taking a screenshot
+        if force_refresh or self._cached_screen is None:
+            BrowserManager.focus_game_window()
+
         if not force_refresh and self._cached_screen is not None:
             return self._cached_screen
 
@@ -391,6 +397,12 @@ class VisionEngine:
         Captures the screen and returns a BGR color numpy array.
         Used for color-sensitive checks like stamina bar HSV color analysis.
         """
+        from modules.browser import BrowserManager
+
+        # Ensure the browser is focused before taking a screenshot
+        if force_refresh or getattr(self, "_cached_screen_color", None) is None:
+            BrowserManager.focus_game_window()
+
         if not force_refresh and getattr(self, "_cached_screen_color", None) is not None:
             return self._cached_screen_color
 

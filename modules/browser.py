@@ -402,6 +402,199 @@ class BrowserManager:
         return ""
 
     @classmethod
+    def focus_game_window(cls) -> bool:
+        """
+        Attempts to bring the browser window with the game tab into focus.
+        Returns True if successful.
+        """
+        target_browser = cls.get_target_browser_name()
+        game_keywords = ["bombcrypto"]
+
+        if platform_utils.is_linux():
+            if shutil.which("hyprctl"):
+                try:
+                    proc = subprocess.run(
+                        ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=2
+                    )
+                    if proc.returncode == 0:
+                        import json
+
+                        clients = json.loads(proc.stdout)
+
+                        # 1st pass: Look for game in title, but ensure it's a browser
+                        for c in clients:
+                            title = c.get("title", "").lower()
+                            cls_name = c.get("class", "").lower()
+                            is_browser = any(
+                                b in cls_name
+                                for b in [
+                                    "chrome",
+                                    "brave",
+                                    "firefox",
+                                    "edge",
+                                    "opera",
+                                    "vivaldi",
+                                    "chromium",
+                                ]
+                            )
+                            if is_browser and any(k in title for k in game_keywords):
+                                win_address = c.get("address", "")
+                                if win_address:
+                                    subprocess.run(
+                                        [
+                                            "hyprctl",
+                                            "dispatch",
+                                            "focuswindow",
+                                            f"address:{win_address}",
+                                        ],
+                                        timeout=2,
+                                    )
+                                    return True
+
+                        # 2nd pass: Look for target browser
+                        for c in clients:
+                            cls_name = c.get("class", "").lower()
+                            title = c.get("title", "").lower()
+                            if target_browser in cls_name or target_browser in title:
+                                win_address = c.get("address", "")
+                                if win_address:
+                                    subprocess.run(
+                                        [
+                                            "hyprctl",
+                                            "dispatch",
+                                            "focuswindow",
+                                            f"address:{win_address}",
+                                        ],
+                                        timeout=2,
+                                    )
+                                    return True
+                except Exception as e:
+                    logger.debug(f"Exception in hyprctl focus: {e}")
+
+            if shutil.which("wmctrl"):
+                try:
+                    proc = subprocess.run(
+                        ["wmctrl", "-l", "-x"], capture_output=True, text=True, timeout=2
+                    )
+                    if proc.returncode == 0:
+                        lines = proc.stdout.splitlines()
+
+                        # 1st pass: Look for game in title, but ensure it's a browser
+                        for line in lines:
+                            line_lower = line.lower()
+                            is_browser = any(
+                                b in line_lower
+                                for b in [
+                                    "chrome",
+                                    "brave",
+                                    "firefox",
+                                    "edge",
+                                    "opera",
+                                    "vivaldi",
+                                    "chromium",
+                                ]
+                            )
+                            if is_browser and any(k in line_lower for k in game_keywords):
+                                win_id = line.split()[0]
+                                subprocess.run(["wmctrl", "-i", "-a", win_id], timeout=2)
+                                return True
+
+                        # 2nd pass: Look for target browser
+                        for line in lines:
+                            line_lower = line.lower()
+                            if target_browser in line_lower:
+                                win_id = line.split()[0]
+                                subprocess.run(["wmctrl", "-i", "-a", win_id], timeout=2)
+                                return True
+                except Exception as e:
+                    logger.debug(f"Exception in wmctrl focus: {e}")
+
+            if shutil.which("xdotool"):
+                try:
+                    # Priority 1: Game keywords, ensuring it's a browser class
+                    proc = subprocess.run(
+                        [
+                            "xdotool",
+                            "search",
+                            "--class",
+                            "chrome|brave|firefox|edge|opera|vivaldi|chromium",
+                            "--name",
+                            "bombcrypto",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    if proc.returncode == 0 and proc.stdout.strip():
+                        win_ids = proc.stdout.strip().splitlines()
+                        for win_id in reversed(win_ids):
+                            res = subprocess.run(["xdotool", "windowactivate", win_id], timeout=2)
+                            if res.returncode == 0:
+                                return True
+
+                    # Priority 2: Target browser
+                    proc = subprocess.run(
+                        ["xdotool", "search", "--name", target_browser],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    if proc.returncode == 0 and proc.stdout.strip():
+                        win_ids = proc.stdout.strip().splitlines()
+                        for win_id in reversed(win_ids):
+                            res = subprocess.run(["xdotool", "windowactivate", win_id], timeout=2)
+                            if res.returncode == 0:
+                                return True
+                except Exception as e:
+                    logger.debug(f"Exception in xdotool focus: {e}")
+
+        elif platform_utils.is_windows():
+            try:
+                cmd_game = [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "$app = Get-Process | Where-Object {$_.MainWindowTitle -match 'bombcrypto' -and $_.ProcessName -match 'chrome|brave|firefox|msedge'}; if ($app) { [void] [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic'); [Microsoft.VisualBasic.Interaction]::AppActivate($app[0].Id); exit 0 } exit 1",
+                ]
+                res = subprocess.run(cmd_game, timeout=2)
+                if res.returncode == 0:
+                    return True
+
+                cmd_browser = [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    f"$app = Get-Process | Where-Object {{$_.MainWindowTitle -match '{target_browser}' -or $_.ProcessName -match '{target_browser}'}}; if ($app) {{ [void] [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic'); [Microsoft.VisualBasic.Interaction]::AppActivate($app[0].Id); exit 0 }} exit 1",
+                ]
+                res2 = subprocess.run(cmd_browser, timeout=2)
+                if res2.returncode == 0:
+                    return True
+            except Exception as e:
+                logger.debug(f"Exception in Windows focus: {e}")
+
+        elif platform_utils.is_mac():
+            try:
+                mac_app_name = target_browser.capitalize()
+                if target_browser == "brave":
+                    mac_app_name = "Brave Browser"
+                elif target_browser == "chrome":
+                    mac_app_name = "Google Chrome"
+                elif target_browser == "edge":
+                    mac_app_name = "Microsoft Edge"
+
+                cmd = [
+                    "osascript",
+                    "-e",
+                    f'tell application "System Events" to set frontmost of every process whose name contains "{mac_app_name}" to true',
+                ]
+                subprocess.run(cmd, timeout=2)
+                return True
+            except Exception as e:
+                logger.debug(f"Exception in Mac focus: {e}")
+
+        return False
+
+    @classmethod
     def get_url_via_clipboard(cls) -> str | None:
         """
         Attempts to read URL directly from browser address bar by triggering Ctrl+L -> Ctrl+C.
