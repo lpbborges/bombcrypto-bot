@@ -4,14 +4,14 @@ import os
 import shutil
 import sys
 
-import config
+from config import BotConfig
 from modules.browser import BrowserManager
 from modules.vision import VisionEngine
 
 
 class SystemDiagnostic:
-    @staticmethod
-    def run_diagnostics(verbose=True) -> dict:
+    @classmethod
+    def run_diagnostics(cls, verbose=True) -> dict:
         """
         Executes a comprehensive system and configuration check for Bomb Crypto Bot.
         Returns a dictionary of diagnostic results and logs findings.
@@ -79,14 +79,14 @@ class SystemDiagnostic:
 
         # 3. Target Template Images Check
         print(" [3/6] Target Image Assets Verification:")
-        target_dir = getattr(config, "TARGETS_DIR", "")
+        target_dir = getattr(cls.config, "targets_dir", "")
         if not os.path.exists(target_dir):
             print(f"   • [FAIL] Targets folder missing at: {target_dir}")
             results["targets"]["directory"] = "FAIL"
             results["errors_count"] += 1
         else:
             missing_targets = []
-            for target_name, path in config.TARGET_IMAGES.items():
+            for target_name, path in cls.config.target_images.items():
                 if os.path.exists(path):
                     try:
                         import cv2
@@ -113,7 +113,7 @@ class SystemDiagnostic:
                 results["warnings_count"] += len(missing_targets)
             else:
                 print(
-                    f"   • [PASS] All {len(config.TARGET_IMAGES)} target template images verified in '{target_dir}'"
+                    f"   • [PASS] All {len(cls.config.target_images)} target template images verified in '{target_dir}'"
                 )
 
         print("")
@@ -193,8 +193,8 @@ class SystemDiagnostic:
         print(f"   • Target Browser:    {target_bname.capitalize()}")
         print(f"   • Executable Path:   {b_exe or 'Not Found on PATH'}")
         print(f"   • Attached Status:   {b_info['status']}")
-        print(f"   • Direct URL Mode:   {config.DIRECT_TREASURE_URL}")
-        print(f"   • Direct Landing:    {config.DIRECT_LANDING_MODE}")
+        print(f"   • Direct URL Mode:   {cls.config.direct_treasure_url}")
+        print(f"   • Direct Landing:    {cls.config.direct_landing_mode}")
 
         if not b_exe and target_bname != "default":
             print(f"   • [WARN] Could not find executable binary for '{target_bname}'.")
@@ -224,7 +224,7 @@ class SystemDiagnostic:
 
 def run_setup_wizard():
     """Interactive wizard to guide non-technical users in generating a .env configuration file."""
-    env_path = os.path.join(config.BASE_DIR, ".env")
+    env_path = os.path.join(cls.config.base_dir, ".env")
     print("\n==================================================")
     print("      BOMB CRYPTO BOT INTERACTIVE SETUP WIZARD    ")
     print("==================================================\n")

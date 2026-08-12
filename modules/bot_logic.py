@@ -8,7 +8,7 @@ from enum import Enum, auto
 import cv2
 import numpy as np
 
-import config
+from config import BotConfig
 from modules.actions import ActionEngine
 from modules.browser import BrowserManager
 from modules.logger import logger
@@ -59,8 +59,10 @@ def format_duration(seconds):
 
 
 class BombCryptoBot:
-    def __init__(self):
-        self.vision = VisionEngine()
+    def __init__(self, cfg: BotConfig):
+        self.config = cfg
+        self.vision = VisionEngine(cfg)
+        self.action = ActionEngine(cfg)
         self.state = BotState.INITIALIZING
         self.last_hero_work_time = 0
         self.last_progress_time = time.time()
@@ -69,7 +71,7 @@ class BombCryptoBot:
         self.start_time = time.time()
 
         # Auto-detect game version from open browser tab on initialization if auto configured
-        if getattr(config, "GAME_VERSION", "auto") == "auto":
+        if getattr(self.config, "game_version", "auto") == "auto":
             BrowserManager.sync_game_version_from_browser()
 
         # Bot runtime statistics
@@ -154,10 +156,10 @@ class BombCryptoBot:
         """
         Executes anti-AFK idle jitter if bot is in RESTING state and interval has elapsed.
         """
-        if getattr(config, "ENABLE_IDLE_JITTER", True) and self.state == BotState.RESTING:
-            jitter_interval = getattr(config, "IDLE_JITTER_INTERVAL_SECONDS", 30)
+        if getattr(self.config, "enable_idle_jitter", True) and self.state == BotState.RESTING:
+            jitter_interval = getattr(self.config, "idle_jitter_interval_seconds", 30)
             if time.time() - self.last_idle_jitter_time >= jitter_interval:
-                ActionEngine.idle_jitter()
+                self.action.idle_jitter()
                 self.last_idle_jitter_time = time.time()
 
     def update_progress(self):
@@ -166,20 +168,20 @@ class BombCryptoBot:
 
     def check_stuck_timeout(self) -> bool:
         """
-        Checks if the bot has been stuck in the same unprogressive state beyond config.MAX_STUCK_TIMEOUT_MINUTES.
+        Checks if the bot has been stuck in the same unprogressive state beyond self.config.max_stuck_timeout_minutes.
         Triggers STUCK_RECOVERY state if timeout exceeded.
         """
         if self.state == BotState.STUCK_RECOVERY:
             return True
 
         stuck_duration = time.time() - self.last_progress_time
-        max_stuck_seconds = config.MAX_STUCK_TIMEOUT_MINUTES * 60.0
+        max_stuck_seconds = self.config.max_stuck_timeout_minutes * 60.0
 
         if stuck_duration >= max_stuck_seconds:
             stuck_mins = stuck_duration / 60.0
             msg = (
                 f"No progress detected for {stuck_mins:.1f} minutes "
-                f"(exceeds threshold of {config.MAX_STUCK_TIMEOUT_MINUTES} min). Triggering anti-stuck recovery..."
+                f"(exceeds threshold of {self.config.max_stuck_timeout_minutes} min). Triggering anti-stuck recovery..."
             )
             logger.warning(f"[BOT STUCK ALERT] {msg}")
             self.stuck_recoveries_count += 1
@@ -192,7 +194,7 @@ class BombCryptoBot:
     def handle_stuck_recovery(self):
         """Executes browser page refresh to recover from frozen/stuck state."""
         logger.info("[BOT RECOVERY] Refreshing browser page to recover from stuck state...")
-        ActionEngine.refresh_page()
+        self.action.refresh_page()
         self.vision.clear_cache()
         self.update_progress()
         self.last_periodic_refresh_time = time.time()
@@ -203,7 +205,7 @@ class BombCryptoBot:
         Checks if the configured periodic page refresh interval has elapsed.
         Refreshes browser page (or exits to menu & re-enters map on v10l) to prevent/recover stuck heroes when inner bot is active.
         """
-        interval_mins = getattr(config, "REFRESH_INTERVAL_MINUTES", 0.0)
+        interval_mins = getattr(self.config, "refresh_interval_minutes", 0.0)
         if interval_mins <= 0:
             return False
 
@@ -221,29 +223,29 @@ class BombCryptoBot:
                 level="info",
             )
 
-            game_ver = getattr(config, "GAME_VERSION", "v13d").lower()
+            game_ver = getattr(self.config, "game_version", "v13d").lower()
             if game_ver == "v10l":
                 logger.info("[BOT REFRESH] Executing v10l refresh...")
                 screen = self.vision.capture_screen()
                 back_match = self.vision.find_template(
-                    config.TARGET_IMAGES["back_button"], screen_gray=screen
+                    self.config.target_images["back_button"], screen_gray=screen
                 )
                 if back_match:
                     logger.info(
                         f"[BOT REFRESH] Back button detected (Confidence: {back_match['confidence']:.2f}). Clicking back button..."
                     )
-                    ActionEngine.click_match(back_match)
+                    self.action.click_match(back_match)
                     self.vision.clear_cache()
-                    ActionEngine.human_delay(2.0, 4.0)
+                    self.action.human_delay(2.0, 4.0)
 
                 entered = self.enter_treasure_hunt()
                 if not back_match and not entered:
                     logger.info(
                         "[BOT REFRESH] Neither back button nor Treasure Hunt button found. Refreshing browser page..."
                     )
-                    ActionEngine.refresh_page()
+                    self.action.refresh_page()
             else:
-                ActionEngine.refresh_page()
+                self.action.refresh_page()
 
             self.vision.clear_cache()
             self.update_progress()
@@ -263,7 +265,9 @@ class BombCryptoBot:
         screen = self.vision.capture_screen()
 
         # Check for 'OK' error button (error_ok)
-        ok_match = self.vision.find_template(config.TARGET_IMAGES["error_ok"], screen_gray=screen)
+        ok_match = self.vision.find_template(
+            self.config.target_images["error_ok"], screen_gray=screen
+        )
 
         if ok_match:
             logger.info(
@@ -271,15 +275,17 @@ class BombCryptoBot:
             )
             self.errors_cleared_count += 1
             NotificationManager.notify_error_cleared("Error OK Button")
-            ActionEngine.click_match(ok_match)
+            self.action.click_match(ok_match)
             self.vision.clear_cache()
             self.update_progress()
             return True
 
         # Check for error message modal (error_message or unknown_error)
         err_msg_match = self.vision.find_template(
-            config.TARGET_IMAGES["error_message"], screen_gray=screen
-        ) or self.vision.find_template(config.TARGET_IMAGES["unknown_error"], screen_gray=screen)
+            self.config.target_images["error_message"], screen_gray=screen
+        ) or self.vision.find_template(
+            self.config.target_images["unknown_error"], screen_gray=screen
+        )
 
         if err_msg_match:
             logger.info(
@@ -288,17 +294,17 @@ class BombCryptoBot:
             self.errors_cleared_count += 1
             # Try to see if an OK button is present to dismiss the error message modal
             ok_match = self.vision.find_template(
-                config.TARGET_IMAGES["error_ok"], screen_gray=screen
+                self.config.target_images["error_ok"], screen_gray=screen
             )
 
             if ok_match:
                 logger.info("[BOT] Found OK button for error message. Clicking OK...")
                 NotificationManager.notify_error_cleared("Error Message OK Button")
-                ActionEngine.click_match(ok_match)
+                self.action.click_match(ok_match)
             else:
                 logger.info("[BOT] No OK button found for error message modal. Refreshing page...")
                 NotificationManager.notify_error_cleared("Error Message Modal")
-                ActionEngine.refresh_page()
+                self.action.refresh_page()
                 self.last_periodic_refresh_time = time.time()
 
             self.vision.clear_cache()
@@ -322,52 +328,52 @@ class BombCryptoBot:
 
     def _try_confirm_profile(self, screen) -> bool:
         profile_ok = self.vision.find_template(
-            config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen
+            self.config.target_images["confirm_profile_ok"], screen_gray=screen
         )
         if profile_ok:
             logger.info("[BOT] Confirm profile button ('OK') found. Clicking OK...")
-            ActionEngine.click_match(profile_ok)
+            self.action.click_match(profile_ok)
             self.vision.clear_cache()
-            ActionEngine.human_delay(4.0, 6.0)
+            self.action.human_delay(4.0, 6.0)
             self.update_progress()
             return True
         return False
 
     def _try_metamask_sign(self, screen) -> bool:
         metamask_sign = self.vision.find_template(
-            config.TARGET_IMAGES["metamask_sign"], screen_gray=screen
+            self.config.target_images["metamask_sign"], screen_gray=screen
         )
         if metamask_sign:
             logger.info("[BOT] MetaMask Sign/Confirm button found. Signing transaction...")
-            ActionEngine.click_match(metamask_sign)
+            self.action.click_match(metamask_sign)
             self.vision.clear_cache()
-            ActionEngine.human_delay(5.0, 8.0)
+            self.action.human_delay(5.0, 8.0)
             self.update_progress()
             return True
         return False
 
     def _try_metamask_select(self, screen) -> bool:
         wallet_select = self.vision.find_template(
-            config.TARGET_IMAGES["select_metamask"], screen_gray=screen
+            self.config.target_images["select_metamask"], screen_gray=screen
         )
         if wallet_select:
             logger.info("[BOT] Select MetaMask icon found. Clicking...")
-            ActionEngine.click_match(wallet_select)
+            self.action.click_match(wallet_select)
             self.vision.clear_cache()
-            ActionEngine.human_delay(3.0, 5.0)
+            self.action.human_delay(3.0, 5.0)
             self.update_progress()
             return True
         return False
 
     def _try_connect_wallet(self, screen) -> bool:
         connect_match = self.vision.find_template(
-            config.TARGET_IMAGES["connect_wallet"], screen_gray=screen
+            self.config.target_images["connect_wallet"], screen_gray=screen
         )
         if connect_match:
             logger.info("[BOT] 'Connect Wallet' button found. Initiating login...")
-            ActionEngine.click_match(connect_match)
+            self.action.click_match(connect_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(4.0, 6.0)
+            self.action.human_delay(4.0, 6.0)
             self.update_progress()
 
             screen_after = self.vision.capture_screen(force_refresh=True)
@@ -402,8 +408,8 @@ class BombCryptoBot:
 
         if (
             enable_home
-            and "available_home" in config.TARGET_IMAGES
-            and os.path.exists(config.TARGET_IMAGES["available_home"])
+            and "available_home" in self.config.target_images
+            and os.path.exists(self.config.target_images["available_home"])
         ):
             if sent_count > 0:
                 work_all_screen_color = self.vision.capture_screen_color(force_refresh=True)
@@ -420,11 +426,11 @@ class BombCryptoBot:
         return screen_color
 
     def _find_work_button_matches(self, screen_gray):
-        if "work_button" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["work_button"]
+        if "work_button" in self.config.target_images and os.path.exists(
+            self.config.target_images["work_button"]
         ):
             return self.vision.find_unique_matches(
-                config.TARGET_IMAGES["work_button"],
+                self.config.target_images["work_button"],
                 screen_gray=screen_gray,
                 threshold=0.65,
                 min_distance=25,
@@ -433,7 +439,7 @@ class BombCryptoBot:
 
     def _find_stamina_matches(self, screen_gray, stamina_targets):
         stamina_paths = [t[0] for t in stamina_targets if os.path.exists(t[0])]
-        min_dist = getattr(config, "STAMINA_MIN_DISTANCE", 30)
+        min_dist = getattr(self.config, "stamina_min_distance", 30)
 
         if stamina_paths:
             return self.vision.find_unique_matches(
@@ -441,9 +447,9 @@ class BombCryptoBot:
             )
 
         fallback_paths = [
-            config.TARGET_IMAGES[k]
+            self.config.target_images[k]
             for k in ["full_bar", "80_bar"]
-            if k in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[k])
+            if k in self.config.target_images and os.path.exists(self.config.target_images[k])
         ]
         return self.vision.find_unique_matches(
             fallback_paths, screen_gray=screen_gray, min_distance=min_dist
@@ -455,15 +461,16 @@ class BombCryptoBot:
             for w_btn in work_buttons:
                 w_x, w_y = w_btn["x"], w_btn["y"]
                 has_bar = any(
-                    abs(s["y"] - w_y) <= getattr(config, "STAMINA_Y_TOLERANCE", 25) and s["x"] < w_x
+                    abs(s["y"] - w_y) <= getattr(self.config, "stamina_y_tolerance", 25)
+                    and s["x"] < w_x
                     for s in stamina_matches
                 )
 
-                c_xmin = max(0, w_x - getattr(config, "STAMINA_CROP_XMIN_OFFSET", 180))
-                c_xmax = max(0, w_x - getattr(config, "STAMINA_CROP_XMAX_OFFSET", 45))
-                c_ymin = max(0, w_y - getattr(config, "STAMINA_CROP_Y_OFFSET", 18))
+                c_xmin = max(0, w_x - getattr(self.config, "stamina_crop_xmin_offset", 180))
+                c_xmax = max(0, w_x - getattr(self.config, "stamina_crop_xmax_offset", 45))
+                c_ymin = max(0, w_y - getattr(self.config, "stamina_crop_y_offset", 18))
                 c_ymax = min(
-                    screen_color.shape[0], w_y + getattr(config, "STAMINA_CROP_Y_OFFSET", 18)
+                    screen_color.shape[0], w_y + getattr(self.config, "stamina_crop_y_offset", 18)
                 )
 
                 crop = screen_color[c_ymin:c_ymax, c_xmin:c_xmax]
@@ -488,16 +495,16 @@ class BombCryptoBot:
             f"[BOT] Pass {scroll_pass + 1}: Found {len(clicks)} eligible hero(es) with stamina >= {min_stamina:.0f}%."
         )
         for x, y in clicks:
-            ActionEngine.click_at(x, y)
-            ActionEngine.human_delay(0.5, 1.2)
+            self.action.click_at(x, y)
+            self.action.human_delay(0.5, 1.2)
         self.vision.clear_cache()
-        ActionEngine.human_delay(1.0, 2.0)
+        self.action.human_delay(1.0, 2.0)
         return len(clicks)
 
     def _scan_home_candidates(self, screen_gray, tier_targets, all_home_candidates, scroll_pass):
         remaining_work = self._find_work_button_matches(screen_gray)
         home_buttons = self.vision.find_unique_matches(
-            config.TARGET_IMAGES["available_home"],
+            self.config.target_images["available_home"],
             screen_gray=screen_gray,
             threshold=0.75,
             min_distance=25,
@@ -551,10 +558,10 @@ class BombCryptoBot:
         center_x = screen_shape[1] // 2
         center_y = screen_shape[0] // 2
         for _ in range(max_scroll_passes - 1):
-            ActionEngine.scroll_up(center_x, center_y, clicks=5)
+            self.action.scroll_up(center_x, center_y, clicks=5)
             time.sleep(0.1)
         self.vision.clear_cache()
-        ActionEngine.human_delay(1.5, 2.5)
+        self.action.human_delay(1.5, 2.5)
 
     def _process_home_passes(
         self, max_scroll_passes: int, all_home_candidates: list[dict], screen_shape: tuple
@@ -574,16 +581,16 @@ class BombCryptoBot:
                 total_sent_home += sent
 
             if target_pass < max_scroll_passes - 1:
-                ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                self.action.scroll_down(center_x, center_y, clicks=5)
                 self.vision.clear_cache()
-                ActionEngine.human_delay(1.5, 2.5)
+                self.action.human_delay(1.5, 2.5)
 
         return total_sent_home
 
     def _process_home_candidates_on_pass(self, pass_candidates: list[dict]) -> tuple[int, bool]:
         pass_screen = self.vision.capture_screen(force_refresh=True)
         home_button_matches = self.vision.find_unique_matches(
-            config.TARGET_IMAGES["available_home"],
+            self.config.target_images["available_home"],
             screen_gray=pass_screen,
             threshold=0.75,
             min_distance=25,
@@ -592,11 +599,11 @@ class BombCryptoBot:
         home_full = False
         if (
             not home_button_matches
-            and "without_space_home" in config.TARGET_IMAGES
-            and os.path.exists(config.TARGET_IMAGES["without_space_home"])
+            and "without_space_home" in self.config.target_images
+            and os.path.exists(self.config.target_images["without_space_home"])
         ):
             if self.vision.find_template(
-                config.TARGET_IMAGES["without_space_home"], screen_gray=pass_screen
+                self.config.target_images["without_space_home"], screen_gray=pass_screen
             ):
                 logger.info("[BOT] Home is full or unavailable.")
                 home_full = True
@@ -610,13 +617,13 @@ class BombCryptoBot:
                 click_x = matched_btn["x"] if matched_btn else cand["x"]
                 click_y = matched_btn["y"] if matched_btn else cand["y"]
 
-                ActionEngine.click_at(click_x, click_y)
+                self.action.click_at(click_x, click_y)
                 sent += 1
                 logger.info(f"[BOT] Placed {cand['tier_name']} hero at home.")
-                ActionEngine.human_delay(0.5, 1.2)
+                self.action.human_delay(0.5, 1.2)
 
             self.vision.clear_cache()
-            ActionEngine.human_delay(1.0, 2.0)
+            self.action.human_delay(1.0, 2.0)
 
         return sent, home_full
 
@@ -624,24 +631,24 @@ class BombCryptoBot:
         """Closes Heroes modal menu and clicks screen center."""
         close_screen = self.vision.capture_screen(force_refresh=True)
         close_match = self.vision.find_template(
-            config.TARGET_IMAGES["close_button"], screen_gray=close_screen
+            self.config.target_images["close_button"], screen_gray=close_screen
         )
         if close_match:
             logger.info(
                 f"[BOT] Closing Heroes menu (Confidence: {close_match['confidence']:.2f})..."
             )
-            ActionEngine.click_match(close_match)
+            self.action.click_match(close_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(1.5, 2.5)
+            self.action.human_delay(1.5, 2.5)
 
         center_x = screen_shape[1] // 2
         center_y = screen_shape[0] // 2
         logger.info(
             f"[BOT] Clicking screen center ({center_x}, {center_y}) to collapse HUD menu..."
         )
-        ActionEngine.click_at(center_x, center_y)
+        self.action.click_at(center_x, center_y)
         self.vision.clear_cache()
-        ActionEngine.human_delay(1.5, 2.5)
+        self.action.human_delay(1.5, 2.5)
 
     def send_heroes_to_work(self) -> bool:
         """
@@ -661,8 +668,8 @@ class BombCryptoBot:
             return False
 
         if (
-            getattr(config, "WORK_ONLY_STAMINA", True)
-            or getattr(config, "HERO_WORK_MODE", "stamina") != "all"
+            getattr(self.config, "work_only_stamina", True)
+            or getattr(self.config, "hero_work_mode", "stamina") != "all"
         ):
             self._process_heroes_by_stamina(screen)
         else:
@@ -678,13 +685,13 @@ class BombCryptoBot:
 
     def _open_bottom_menu(self, screen):
         bottom_arrow_match = self.vision.find_template(
-            config.TARGET_IMAGES["bottom_arrow"], screen_gray=screen
+            self.config.target_images["bottom_arrow"], screen_gray=screen
         )
         if bottom_arrow_match:
             logger.info("[BOT] Found bottom arrow menu button. Opening menu...")
-            ActionEngine.click_match(bottom_arrow_match)
+            self.action.click_match(bottom_arrow_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(2.0, 4.0)
+            self.action.human_delay(2.0, 4.0)
             return self.vision.capture_screen(force_refresh=True)
         else:
             logger.info(
@@ -694,24 +701,24 @@ class BombCryptoBot:
 
     def _open_heroes_menu(self, screen) -> bool:
         heroes_match = self.vision.find_template(
-            config.TARGET_IMAGES["heroes_button"], screen_gray=screen
+            self.config.target_images["heroes_button"], screen_gray=screen
         )
         if heroes_match:
             logger.info("[BOT] Found Heroes button inside menu. Opening heroes list...")
-            ActionEngine.click_match(heroes_match)
+            self.action.click_match(heroes_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(2.5, 4.5)
+            self.action.human_delay(2.5, 4.5)
             return True
         return False
 
     def _process_heroes_by_stamina(self, screen):
-        min_stamina = getattr(config, "HERO_MIN_STAMINA", 60.0)
-        max_scroll_passes = getattr(config, "HERO_MODAL_MAX_SCROLLS", 4)
-        enable_home = getattr(config, "ENABLE_HOME_STRATEGY", True)
+        min_stamina = getattr(self.config, "hero_min_stamina", 60.0)
+        max_scroll_passes = getattr(self.config, "hero_modal_max_scrolls", 4)
+        enable_home = getattr(self.config, "enable_home_strategy", True)
         logger.info(f"[BOT] Scanning hero list for stamina >= {min_stamina:.0f}%...")
 
-        stamina_targets = config.load_stamina_targets(min_stamina)
-        tier_targets = config.load_tier_targets() if enable_home else []
+        stamina_targets = self.config.load_stamina_targets(min_stamina)
+        tier_targets = self.config.load_tier_targets() if enable_home else []
         total_sent = 0
         all_home_candidates = []
 
@@ -728,9 +735,9 @@ class BombCryptoBot:
             if scroll_pass < max_scroll_passes - 1:
                 center_x = screen.shape[1] // 2
                 center_y = screen.shape[0] // 2
-                ActionEngine.scroll_down(center_x, center_y, clicks=5)
+                self.action.scroll_down(center_x, center_y, clicks=5)
                 self.vision.clear_cache()
-                ActionEngine.human_delay(1.5, 2.5)
+                self.action.human_delay(1.5, 2.5)
 
         if total_sent > 0:
             logger.info(f"[BOT] Sent a total of {total_sent} hero(es) to work.")
@@ -747,7 +754,7 @@ class BombCryptoBot:
     def _process_work_all_heroes(self):
         work_all_screen = self.vision.capture_screen(force_refresh=True)
         rest_all_match = self.vision.find_template(
-            config.TARGET_IMAGES["rest_all_button"], screen_gray=work_all_screen
+            self.config.target_images["rest_all_button"], screen_gray=work_all_screen
         )
         if rest_all_match:
             logger.info(
@@ -755,13 +762,13 @@ class BombCryptoBot:
             )
         else:
             work_all_match = self.vision.find_template(
-                config.TARGET_IMAGES["work_all_button"], screen_gray=work_all_screen
+                self.config.target_images["work_all_button"], screen_gray=work_all_screen
             )
             if work_all_match:
                 logger.info("[BOT] Clicking 'Work All' button...")
-                ActionEngine.click_match(work_all_match)
+                self.action.click_match(work_all_match)
                 self.vision.clear_cache()
-                ActionEngine.human_delay(2.0, 3.5)
+                self.action.human_delay(2.0, 3.5)
             else:
                 logger.warning("[BOT] Neither 'Work All' nor 'Rest All' button image found.")
 
@@ -771,7 +778,7 @@ class BombCryptoBot:
         If DIRECT_LANDING_MODE is enabled (default for v13d), the direct URL lands straight into Treasure Hunt.
         Otherwise (default for v10l), attempts to locate and click the Treasure Hunt icon on the main menu.
         """
-        if config.DIRECT_LANDING_MODE:
+        if self.config.direct_landing_mode:
             logger.info("[BOT] Direct landing mode active. Skipping main menu icon click.")
             self.update_progress()
             return True
@@ -779,20 +786,20 @@ class BombCryptoBot:
         logger.info("[BOT] Searching for Treasure Hunt icon on main menu...")
         screen = self.vision.capture_screen()
         th_match = self.vision.find_template(
-            config.TARGET_IMAGES["treasure_hunt_icon"], screen_gray=screen
+            self.config.target_images["treasure_hunt_icon"], screen_gray=screen
         )
-        if not th_match and "treasure_hunt_button" in config.TARGET_IMAGES:
+        if not th_match and "treasure_hunt_button" in self.config.target_images:
             th_match = self.vision.find_template(
-                config.TARGET_IMAGES["treasure_hunt_button"], screen_gray=screen
+                self.config.target_images["treasure_hunt_button"], screen_gray=screen
             )
 
         if th_match:
             logger.info(
                 f"[BOT] Found Treasure Hunt map icon (Confidence: {th_match['confidence']:.2f}). Clicking to enter map..."
             )
-            ActionEngine.click_match(th_match)
+            self.action.click_match(th_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(2.0, 4.0)
+            self.action.human_delay(2.0, 4.0)
             self.update_progress()
             return True
 
@@ -809,7 +816,7 @@ class BombCryptoBot:
 
         # Step 1: Check for map_complete_button first
         button_match = self.vision.find_template(
-            config.TARGET_IMAGES["map_complete_button"], screen_gray=screen
+            self.config.target_images["map_complete_button"], screen_gray=screen
         )
         if button_match:
             logger.info(
@@ -818,16 +825,16 @@ class BombCryptoBot:
             self.maps_cleared_count += 1
             NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
-            ActionEngine.click_match(button_match)
+            self.action.click_match(button_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(3.0, 5.0)
+            self.action.human_delay(3.0, 5.0)
             self.update_progress()
             self.set_state(BotState.RESTING)
             return True
 
         # Step 2: Check for map_complete modal as fallback
         map_match = self.vision.find_template(
-            config.TARGET_IMAGES["map_complete"], screen_gray=screen
+            self.config.target_images["map_complete"], screen_gray=screen
         )
         if map_match:
             logger.info(
@@ -836,9 +843,9 @@ class BombCryptoBot:
             self.maps_cleared_count += 1
             NotificationManager.notify_map_cleared()
             self.set_state(BotState.MAP_CLEARED)
-            ActionEngine.click_match(map_match)
+            self.action.click_match(map_match)
             self.vision.clear_cache()
-            ActionEngine.human_delay(3.0, 5.0)
+            self.action.human_delay(3.0, 5.0)
             self.update_progress()
             self.set_state(BotState.RESTING)
             return True
@@ -910,8 +917,8 @@ class BombCryptoBot:
         return False
 
     def _execute_fsm_work_cycle(self):
-        only_error_refresh = getattr(config, "ONLY_REFRESH_ON_ERROR", False)
-        hero_work_enabled = getattr(config, "ENABLE_HERO_WORK_ACTIONS", True)
+        only_error_refresh = getattr(self.config, "only_refresh_on_error", False)
+        hero_work_enabled = getattr(self.config, "enable_hero_work_actions", True)
 
         if only_error_refresh or not hero_work_enabled:
             mode_desc = "Error-Only Refresh" if only_error_refresh else "Inner Bot Monitoring"
@@ -930,7 +937,7 @@ class BombCryptoBot:
             self._transition_and_send_heroes()
         else:
             elapsed_seconds = time.time() - self.last_hero_work_time
-            interval_seconds = config.HERO_WORK_INTERVAL_MINUTES * 60.0
+            interval_seconds = self.config.hero_work_interval_minutes * 60.0
 
             if elapsed_seconds >= interval_seconds:
                 elapsed_str = format_duration(elapsed_seconds)

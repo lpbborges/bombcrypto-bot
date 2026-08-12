@@ -11,6 +11,7 @@ import time
 import types
 
 import config
+from config import BotConfig
 from modules import ensure_mouseinfo_mocked, platform_utils
 from modules.logger import logger
 
@@ -152,19 +153,21 @@ def generate_bezier_curve(start, end, num_points=15):
 
 
 class ActionEngine:
-    @staticmethod
-    def move_mouse_bezier(start_x, start_y, end_x, end_y, duration=None, steps=None):
+    def __init__(self, cfg: BotConfig):
+        self.config = cfg
+
+    def move_mouse_bezier(self, start_x, start_y, end_x, end_y, duration=None, steps=None):
         """
         Moves mouse along a cubic Bézier curve from (start_x, start_y) to (end_x, end_y).
         """
         if duration is None:
-            min_dur = getattr(config, "MIN_CLICK_DURATION", 0.08)
-            max_dur = getattr(config, "MAX_CLICK_DURATION", 0.20)
+            min_dur = getattr(self.config, "min_click_duration", 0.08)
+            max_dur = getattr(self.config, "max_click_duration", 0.20)
             duration = random.uniform(min_dur, max_dur)
 
         distance = math.hypot(end_x - start_x, end_y - start_y)
         if steps is None:
-            min_steps = getattr(config, "BEZIER_MIN_STEPS", 5)
+            min_steps = getattr(self.config, "bezier_min_steps", 5)
             steps = max(min_steps, int(distance / 25))
 
         points = generate_bezier_curve((start_x, start_y), (end_x, end_y), num_points=steps)
@@ -191,18 +194,22 @@ class ActionEngine:
             except Exception as e:
                 logger.debug(f"Exception caught: {e}", exc_info=True)
 
-    @staticmethod
     def human_delay(
-        min_sec=config.MIN_ACTION_DELAY,
-        max_sec=config.MAX_ACTION_DELAY,
+        self,
+        min_sec=None,
+        max_sec=None,
         use_gaussian=None,
     ):
         """
         Waits a randomized human-like delay.
         Supports Gaussian (normal) distribution centered between min_sec and max_sec.
         """
+        if min_sec is None:
+            min_sec = self.config.min_action_delay
+        if max_sec is None:
+            max_sec = self.config.max_action_delay
         if use_gaussian is None:
-            use_gaussian = getattr(config, "USE_GAUSSIAN_DELAYS", True)
+            use_gaussian = getattr(self.config, "use_gaussian_delays", True)
 
         if use_gaussian:
             mu = (min_sec + max_sec) / 2.0
@@ -215,13 +222,12 @@ class ActionEngine:
         time.sleep(delay)
         return delay
 
-    @staticmethod
-    def idle_jitter(max_offset=None):
+    def idle_jitter(self, max_offset=None):
         """
         Performs periodic anti-AFK idle mouse movement by subtle jittering from current position.
         """
         if max_offset is None:
-            max_offset = getattr(config, "IDLE_JITTER_MAX_OFFSET", 15)
+            max_offset = getattr(self.config, "idle_jitter_max_offset", 15)
 
         try:
             cur_x, cur_y = pyautogui.position()
@@ -236,17 +242,16 @@ class ActionEngine:
         logger.info(
             f"[ACTION] Executing anti-AFK idle jitter: ({cur_x}, {cur_y}) -> ({target_x}, {target_y})"
         )
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(
                 f"[DRY-RUN] [ACTION] Would perform anti-AFK idle jitter to ({target_x}, {target_y})"
             )
             return target_x, target_y
 
-        ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.10)
+        self.move_mouse_bezier(cur_x, cur_y, target_x, target_y, duration=0.10)
         return target_x, target_y
 
-    @staticmethod
-    def click_at(x, y, offset=config.MOUSE_CLICK_OFFSET):
+    def click_at(self, x, y, offset=None):
         """
         Moves to (x, y) with slight random pixel variation and clicks.
         Supports Bézier trajectory, kernel uinput device, ydotool (Wayland), xdotool (X11), and PyAutoGUI.
@@ -254,17 +259,17 @@ class ActionEngine:
         target_x = x + random.randint(-offset, offset)
         target_y = y + random.randint(-offset, offset)
 
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(f"[DRY-RUN] [ACTION] Would click at physical ({target_x}, {target_y})")
             return
 
-        use_bezier = getattr(config, "USE_BEZIER_CURVES", True)
+        use_bezier = getattr(self.config, "use_bezier_curves", True)
         if use_bezier:
             try:
                 cur_x, cur_y = pyautogui.position()
             except Exception:
                 cur_x, cur_y = target_x, target_y
-            ActionEngine.move_mouse_bezier(cur_x, cur_y, target_x, target_y)
+            self.move_mouse_bezier(cur_x, cur_y, target_x, target_y)
         else:
             if HAS_HYPRCTL:
                 try:
@@ -348,8 +353,7 @@ class ActionEngine:
         except Exception as err:
             logger.error(f"[ACTION] All mouse click methods failed: {err}")
 
-    @staticmethod
-    def click_match(match_result):
+    def click_match(self, match_result):
         """Convenience method to click a vision match object."""
         if match_result:
             ActionEngine.click_at(match_result["x"], match_result["y"])
@@ -357,13 +361,12 @@ class ActionEngine:
             return True
         return False
 
-    @staticmethod
-    def navigate_to_url(url=config.DIRECT_TREASURE_URL):
+    def navigate_to_url(self, url=None):
         """
         Navigates browser directly to specified URL via Ctrl+L address bar input.
         """
         logger.info(f"[ACTION] Navigating directly to URL: {url}")
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(f"[DRY-RUN] [ACTION] Would navigate to URL: {url}")
             return
 
@@ -376,14 +379,15 @@ class ActionEngine:
             logger.warning(f"[ACTION] hotkey URL navigation failed ({err}).")
         ActionEngine.human_delay(5.0, 10.0)
 
-    @staticmethod
-    def refresh_page():
+    def refresh_page(
+        self,
+    ):
         """Performs browser page refresh or direct URL navigation."""
-        if config.DIRECT_LANDING_MODE:
-            ActionEngine.navigate_to_url(config.DIRECT_TREASURE_URL)
+        if self.config.direct_landing_mode:
+            ActionEngine.navigate_to_url(self.config.direct_treasure_url)
         else:
             logger.info("[ACTION] Refreshing browser page (F5)...")
-            if getattr(config, "DRY_RUN", False):
+            if getattr(self.config, "dry_run", False):
                 logger.info("[DRY-RUN] [ACTION] Would press F5 to refresh page")
                 return
 
@@ -393,14 +397,13 @@ class ActionEngine:
                 logger.warning(f"[ACTION] F5 refresh failed ({err}).")
             ActionEngine.human_delay(5.0, 10.0)
 
-    @staticmethod
-    def drag_scroll(start_x, start_y, end_x, end_y, duration=0.35):
+    def drag_scroll(self, start_x, start_y, end_x, end_y, duration=0.35):
         """
         Performs mouse press, drag from (start_x, start_y) to (end_x, end_y), and release.
         Provides drag-scrolling for Unity/HTML5 UI containers (like Bombcrypto modals).
         Handles Hyprland display scale factor (e.g. 1.2x) and native display dispatching.
         """
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(
                 f"[DRY-RUN] [ACTION] Would drag-scroll from ({start_x}, {start_y}) to ({end_x}, {end_y})"
             )
@@ -468,11 +471,11 @@ class ActionEngine:
         # 2. Native kernel uinput drag
         if UINPUT_MOUSE:
             try:
-                ActionEngine.move_mouse_bezier(start_x, start_y, start_x, start_y, duration=0.05)
+                self.move_mouse_bezier(start_x, start_y, start_x, start_y, duration=0.05)
                 UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 1)
                 UINPUT_MOUSE.syn()
                 time.sleep(0.05)
-                ActionEngine.move_mouse_bezier(start_x, start_y, end_x, end_y, duration=duration)
+                self.move_mouse_bezier(start_x, start_y, end_x, end_y, duration=duration)
                 time.sleep(0.05)
                 UINPUT_MOUSE.write(ecodes.EV_KEY, ecodes.BTN_LEFT, 0)
                 UINPUT_MOUSE.syn()
@@ -512,13 +515,12 @@ class ActionEngine:
         except Exception as err:
             logger.error(f"[ACTION] PyAutoGUI drag-scroll failed: {err}")
 
-    @staticmethod
-    def scroll_down(x=None, y=None, distance=300, clicks=5):
+    def scroll_down(self, x=None, y=None, distance=300, clicks=5):
         """
         Scrolls down the UI modal by performing a click-and-drag UP gesture inside the container,
         which scrolls the container content down in Bombcrypto and Unity web modals.
         """
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(f"[DRY-RUN] [ACTION] Would scroll down modal at ({x}, {y})")
             return
 
@@ -543,13 +545,12 @@ class ActionEngine:
         except Exception as e:
             logger.debug(f"Exception caught: {e}", exc_info=True)
 
-    @staticmethod
-    def scroll_up(x=None, y=None, distance=300, clicks=5):
+    def scroll_up(self, x=None, y=None, distance=300, clicks=5):
         """
         Scrolls up the UI modal by performing a click-and-drag DOWN gesture inside the container,
         which scrolls the container content up in Bombcrypto and Unity web modals.
         """
-        if getattr(config, "DRY_RUN", False):
+        if getattr(self.config, "dry_run", False):
             logger.info(f"[DRY-RUN] [ACTION] Would scroll up modal at ({x}, {y})")
             return
 

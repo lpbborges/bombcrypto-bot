@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Base Directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,61 +193,6 @@ TIER_PRIORITIES = {
 }
 
 
-def load_stamina_targets(min_stamina=None):
-    """
-    Loads stamina bar template images from targets/staminas/ filtered by min_stamina percentage.
-    Default min_stamina is HERO_MIN_STAMINA (60%).
-    """
-    if min_stamina is None:
-        min_stamina = HERO_MIN_STAMINA
-
-    targets = []
-    if not os.path.exists(STAMINA_TARGETS_DIR):
-        return targets
-
-    for fname in os.listdir(STAMINA_TARGETS_DIR):
-        if not fname.endswith(".png"):
-            continue
-        name_no_ext = fname.rsplit(".", 1)[0].lower()
-        if name_no_ext == "full":
-            pct = 100.0
-        else:
-            try:
-                pct = float(name_no_ext)
-            except ValueError:
-                continue
-
-        if pct >= min_stamina:
-            full_path = os.path.join(STAMINA_TARGETS_DIR, fname)
-            targets.append((full_path, pct))
-
-    # Sort descending by stamina percentage (e.g. 100, 90, 80, 70, 60)
-    targets.sort(key=lambda x: x[1], reverse=True)
-    return targets
-
-
-def load_tier_targets():
-    """
-    Loads tier template images from targets/tiers/ mapped to priority values.
-    Returns list of tuples: (full_path, tier_name, priority) sorted descending by priority.
-    """
-    targets = []
-    if not os.path.exists(TIERS_DIR):
-        return targets
-
-    for fname in os.listdir(TIERS_DIR):
-        if not fname.endswith(".png"):
-            continue
-        tier_name = fname.rsplit(".", 1)[0].lower()
-        priority = TIER_PRIORITIES.get(tier_name, 0)
-        full_path = os.path.join(TIERS_DIR, fname)
-        targets.append((full_path, tier_name, priority))
-
-    # Sort descending by tier priority (e.g. super_legendary 6, legendary 5, epic 4, super_rare 3)
-    targets.sort(key=lambda x: x[2], reverse=True)
-    return targets
-
-
 # Target Image Filenames
 TARGET_IMAGES = {
     "connect_wallet": os.path.join(TARGETS_DIR, "connect_wallet.png"),
@@ -330,32 +275,6 @@ TARGET_ROIS = {
 }
 
 
-def get_target_key(target_name_or_path: str) -> str:
-    """Helper to resolve target_name_or_path to a standard target key."""
-    if not target_name_or_path:
-        return ""
-    if target_name_or_path in TARGET_IMAGES:
-        return target_name_or_path
-    base = os.path.basename(target_name_or_path)
-    filename, _ = os.path.splitext(base)
-    for key, path in TARGET_IMAGES.items():
-        if path == target_name_or_path or key == filename:
-            return key
-    return filename
-
-
-def get_target_threshold(target_name_or_path: str) -> float:
-    """Returns the per-template matching threshold from config or DEFAULT_MATCH_THRESHOLD."""
-    key = get_target_key(target_name_or_path)
-    return TARGET_THRESHOLDS.get(key, DEFAULT_MATCH_THRESHOLD)
-
-
-def get_target_roi(target_name_or_path: str):
-    """Returns the per-template Region of Interest (ROI) tuple or None."""
-    key = get_target_key(target_name_or_path)
-    return TARGET_ROIS.get(key, None)
-
-
 @dataclass
 class BotConfig:
     """Encapsulated Bot Configuration Dataclass."""
@@ -396,3 +315,72 @@ class BotConfig:
     hero_min_stamina: float = HERO_MIN_STAMINA
     hero_modal_max_scrolls: int = HERO_MODAL_MAX_SCROLLS
     enable_home_strategy: bool = ENABLE_HOME_STRATEGY
+
+    # Added fields
+    target_images: dict = field(default_factory=lambda: TARGET_IMAGES)
+    target_thresholds: dict = field(default_factory=lambda: TARGET_THRESHOLDS)
+    target_rois: dict = field(default_factory=lambda: TARGET_ROIS)
+    debug_dir: str = DEBUG_DIR
+    targets_dir: str = TARGETS_DIR
+    stamina_crop_xmin_offset: int = STAMINA_CROP_XMIN_OFFSET
+    stamina_crop_xmax_offset: int = STAMINA_CROP_XMAX_OFFSET
+    stamina_crop_y_offset: int = STAMINA_CROP_Y_OFFSET
+    stamina_y_tolerance: int = 25
+    stamina_min_distance: int = 30
+
+    def get_target_key(self, target_name_or_path: str) -> str:
+        if not target_name_or_path:
+            return ""
+        if target_name_or_path in self.target_images:
+            return target_name_or_path
+        base = os.path.basename(target_name_or_path)
+        filename, _ = os.path.splitext(base)
+        for key, path in self.target_images.items():
+            if path == target_name_or_path or key == filename:
+                return key
+        return filename
+
+    def get_target_threshold(self, target_name_or_path: str) -> float:
+        key = self.get_target_key(target_name_or_path)
+        return self.target_thresholds.get(key, self.default_match_threshold)
+
+    def get_target_roi(self, target_name_or_path: str):
+        key = self.get_target_key(target_name_or_path)
+        return self.target_rois.get(key, None)
+
+    def load_stamina_targets(self, min_stamina=None):
+        if min_stamina is None:
+            min_stamina = self.hero_min_stamina
+        targets = []
+        stamina_dir = os.path.join(self.targets_dir, "staminas")
+        if not os.path.exists(stamina_dir):
+            return targets
+        for fname in os.listdir(stamina_dir):
+            if not fname.endswith(".png"):
+                continue
+            name_no_ext = fname.rsplit(".", 1)[0].lower()
+            if name_no_ext == "full":
+                pct = 100.0
+            else:
+                try:
+                    pct = float(name_no_ext)
+                except ValueError:
+                    continue
+            if pct >= min_stamina:
+                targets.append((os.path.join(stamina_dir, fname), pct))
+        targets.sort(key=lambda x: x[1], reverse=True)
+        return targets
+
+    def load_tier_targets(self):
+        targets = []
+        tiers_dir = os.path.join(self.targets_dir, "tiers")
+        if not os.path.exists(tiers_dir):
+            return targets
+        for fname in os.listdir(tiers_dir):
+            if not fname.endswith(".png"):
+                continue
+            tier_name = fname.rsplit(".", 1)[0].lower()
+            priority = TIER_PRIORITIES.get(tier_name, 0)
+            targets.append((os.path.join(tiers_dir, fname), tier_name, priority))
+        targets.sort(key=lambda x: x[2], reverse=True)
+        return targets

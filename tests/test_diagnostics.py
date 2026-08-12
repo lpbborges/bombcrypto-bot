@@ -1,4 +1,6 @@
+from config import BotConfig
 import unittest
+from config import BotConfig
 from unittest.mock import patch
 
 from modules.diagnostics import SystemDiagnostic

@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import webbrowser
 
-import config
+from config import BotConfig
 from modules import platform_utils
 from modules.logger import logger
 
@@ -84,16 +84,16 @@ KNOWN_BROWSER_PATHS = {
 
 
 class BrowserManager:
-    @staticmethod
-    def get_target_browser_name() -> str:
+    @classmethod
+    def get_target_browser_name(cls) -> str:
         """Returns normalized target browser type string from config."""
-        browser_type = getattr(config, "TARGET_BROWSER", "brave").lower()
+        browser_type = getattr(cls.config, "target_browser", "brave").lower()
         if browser_type in ("auto", "default", ""):
             return "brave"
         return browser_type
 
-    @staticmethod
-    def get_attached_browser_info():
+    @classmethod
+    def get_attached_browser_info(cls):
         """
         Detects active browser processes across Linux, macOS, and Windows.
         Returns: dict: { 'name': str, 'pid': str, 'exe': str, 'status': str }
@@ -185,26 +185,26 @@ class BrowserManager:
             "status": "WAITING FOR BROWSER",
         }
 
-    @staticmethod
-    def is_browser_running() -> bool:
+    @classmethod
+    def is_browser_running(cls) -> bool:
         """Checks if a supported browser process is currently active on the system."""
         info = BrowserManager.get_attached_browser_info()
         return info.get("status") == "ATTACHED & RUNNING"
 
-    @staticmethod
-    def is_brave_running() -> bool:
+    @classmethod
+    def is_brave_running(cls) -> bool:
         """Backward compatible check for Brave browser."""
         info = BrowserManager.get_attached_browser_info()
         return info.get("status") == "ATTACHED & RUNNING"
 
-    @staticmethod
-    def find_browser_executable(browser_type: str = None) -> str:
+    @classmethod
+    def find_browser_executable(cls, browser_type: str = None) -> str:
         """
         Locates the absolute path of the specified browser binary on the system.
         Supports custom override via BROWSER_EXECUTABLE_PATH or environment variable.
         """
         # 1. Custom path override check
-        custom_path = getattr(config, "BROWSER_EXECUTABLE_PATH", "").strip()
+        custom_path = getattr(cls.config, "browser_executable_path", "").strip()
         if custom_path and os.path.exists(custom_path) and os.access(custom_path, os.X_OK):
             return custom_path
 
@@ -233,13 +233,13 @@ class BrowserManager:
 
         return None
 
-    @staticmethod
-    def find_brave_executable() -> str:
+    @classmethod
+    def find_brave_executable(cls) -> str:
         """Backward compatible helper to find Brave executable."""
         return BrowserManager.find_browser_executable("brave")
 
-    @staticmethod
-    def launch_browser(url: str = config.DIRECT_TREASURE_URL, browser_type: str = None) -> bool:
+    @classmethod
+    def launch_browser(cls, url: str = None, browser_type: str = None) -> bool:
         """
         Launches the configured browser with the direct game landing URL.
         """
@@ -266,13 +266,13 @@ class BrowserManager:
             )
             return webbrowser.open(url)
 
-    @staticmethod
-    def launch_brave(url: str = config.DIRECT_TREASURE_URL) -> bool:
+    @classmethod
+    def launch_brave(cls, url: str = None) -> bool:
         """Backward compatible helper to launch Brave."""
         return BrowserManager.launch_browser(url, "brave")
 
-    @staticmethod
-    def verify_and_ensure_browser() -> bool:
+    @classmethod
+    def verify_and_ensure_browser(cls) -> bool:
         """
         Verifies browser status. If target browser is not running, attempts auto-launch.
         """
@@ -286,13 +286,13 @@ class BrowserManager:
         )
         return BrowserManager.launch_browser()
 
-    @staticmethod
-    def verify_and_ensure_brave() -> bool:
+    @classmethod
+    def verify_and_ensure_brave(cls) -> bool:
         """Backward compatible helper to verify and launch browser."""
         return BrowserManager.verify_and_ensure_browser()
 
-    @staticmethod
-    def get_url_from_process_args() -> str | None:
+    @classmethod
+    def get_url_from_process_args(cls) -> str | None:
         """Inspects command-line arguments of active browser processes for game URLs."""
         try:
             if platform_utils.is_windows():
@@ -328,8 +328,8 @@ class BrowserManager:
             logger.debug(f"[BROWSER] Notice scanning process arguments: {e}")
         return None
 
-    @staticmethod
-    def get_browser_window_title() -> str:
+    @classmethod
+    def get_browser_window_title(cls) -> str:
         """Gets window title string of active browser window."""
         if platform_utils.is_linux():
             if shutil.which("hyprctl"):
@@ -400,13 +400,13 @@ class BrowserManager:
 
         return ""
 
-    @staticmethod
-    def get_url_via_clipboard() -> str | None:
+    @classmethod
+    def get_url_via_clipboard(cls) -> str | None:
         """
         Attempts to read URL directly from browser address bar by triggering Ctrl+L -> Ctrl+C.
         Restores original clipboard content after reading.
         """
-        if getattr(config, "DRY_RUN", False):
+        if getattr(cls.config, "dry_run", False):
             return None
 
         original_clip = get_clipboard_text()
@@ -439,8 +439,8 @@ class BrowserManager:
 
         return None
 
-    @staticmethod
-    def get_open_browser_url(try_clipboard: bool = False) -> str | None:
+    @classmethod
+    def get_open_browser_url(cls, try_clipboard: bool = False) -> str | None:
         """
         Detects URL of the currently open browser tab using multiple detection strategies:
         1. Process command line arguments inspection.
@@ -481,8 +481,8 @@ class BrowserManager:
 
         return None
 
-    @staticmethod
-    def detect_game_version(try_clipboard: bool = False) -> str | None:
+    @classmethod
+    def detect_game_version(cls, try_clipboard: bool = False) -> str | None:
         """
         Detects game version ('v13d' or 'v10l') by examining the open browser URL and window title.
         Returns 'v13d', 'v10l', or None if undetected.
@@ -505,11 +505,11 @@ class BrowserManager:
 
         return None
 
-    @staticmethod
-    def sync_game_version_from_browser(try_clipboard: bool = False) -> str:
+    @classmethod
+    def sync_game_version_from_browser(cls, try_clipboard: bool = False) -> str:
         """
-        Auto-detects open browser URL/version and updates config.GAME_VERSION,
-        config.DIRECT_TREASURE_URL, and config.DIRECT_LANDING_MODE accordingly.
+        Auto-detects open browser URL/version and updates cls.config.game_version,
+        cls.config.direct_treasure_url, and cls.config.direct_landing_mode accordingly.
         Returns the detected or active game version string.
         """
         detected_url = BrowserManager.get_open_browser_url(try_clipboard=try_clipboard)
@@ -517,12 +517,12 @@ class BrowserManager:
 
         if detected_url:
             logger.info(f"[BROWSER] Detected open browser URL: {detected_url}")
-            config.DIRECT_TREASURE_URL = detected_url
+            cls.config.direct_treasure_url = detected_url
 
         if detected_ver in ("v13d", "v10l"):
-            old_ver = getattr(config, "GAME_VERSION", "v13d")
-            config.GAME_VERSION = detected_ver
-            config.DIRECT_LANDING_MODE = detected_ver == "v13d"
+            old_ver = getattr(cls.config, "game_version", "v13d")
+            cls.config.game_version = detected_ver
+            cls.config.direct_landing_mode = detected_ver == "v13d"
             if old_ver != detected_ver:
                 logger.info(
                     f"[BROWSER] Auto-detected Game Version: {old_ver} -> {detected_ver.upper()}"
@@ -532,12 +532,12 @@ class BrowserManager:
             return detected_ver
         else:
             cur_ver = (
-                getattr(config, "GAME_VERSION", "v13d")
-                if getattr(config, "GAME_VERSION", "auto") != "auto"
+                getattr(cls.config, "game_version", "v13d")
+                if getattr(cls.config, "game_version", "auto") != "auto"
                 else "v13d"
             )
-            config.GAME_VERSION = cur_ver
-            config.DIRECT_LANDING_MODE = cur_ver == "v13d"
+            cls.config.game_version = cur_ver
+            cls.config.direct_landing_mode = cur_ver == "v13d"
             logger.info(f"[BROWSER] Could not auto-detect version. Using: {cur_ver.upper()}")
             return cur_ver
 

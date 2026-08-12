@@ -14,7 +14,7 @@ import mss
 import numpy as np
 from PIL import Image
 
-import config
+from config import BotConfig
 from modules import platform_utils
 from modules.logger import logger
 
@@ -53,8 +53,11 @@ class GameScreen(Enum):
 
 
 class VisionEngine:
-    def __init__(self, monitor_index=config.SCREENSHOT_MONITOR_INDEX):
-        self.monitor_index = monitor_index
+    def __init__(self, cfg: BotConfig, monitor_index=None):
+        self.config = cfg
+        self.monitor_index = (
+            monitor_index if monitor_index is not None else cfg.screenshot_monitor_index
+        )
         try:
             mss_factory = getattr(mss, "MSS", mss.mss)
             self.sct = mss_factory()
@@ -377,8 +380,8 @@ class VisionEngine:
 
         self._cached_screen = gray_img
 
-        if config.SAVE_DEBUG_IMAGES and gray_img is not None:
-            debug_path = os.path.join(config.DEBUG_DIR, "debug_last_screen.png")
+        if self.config.save_debug_images and gray_img is not None:
+            debug_path = os.path.join(self.config.debug_dir, "debug_last_screen.png")
             cv2.imwrite(debug_path, gray_img)
 
         return gray_img
@@ -425,7 +428,7 @@ class VisionEngine:
         """
         Draws a bounding box and label over the matched target and saves debug_last_match.png.
         """
-        if not config.SAVE_DEBUG_IMAGES or not match_result:
+        if not self.config.save_debug_images or not match_result:
             return
 
         if screen_gray is None:
@@ -451,7 +454,7 @@ class VisionEngine:
             2,
         )
 
-        match_path = os.path.join(config.DEBUG_DIR, "debug_last_match.png")
+        match_path = os.path.join(self.config.debug_dir, "debug_last_match.png")
         cv2.imwrite(match_path, debug_img)
         logger.debug(f"[VISION DEBUG] Saved match visualization to: {match_path}")
 
@@ -506,10 +509,10 @@ class VisionEngine:
             return None
 
         if threshold is None:
-            threshold = config.get_target_threshold(template_path)
+            threshold = self.config.get_target_threshold(template_path)
 
         if roi is None:
-            roi = config.get_target_roi(template_path)
+            roi = self.config.get_target_roi(template_path)
 
         if screen_gray is None:
             screen_gray = self.capture_screen()
@@ -568,10 +571,10 @@ class VisionEngine:
             return []
 
         if threshold is None:
-            threshold = config.get_target_threshold(template_path)
+            threshold = self.config.get_target_threshold(template_path)
 
         if roi is None:
-            roi = config.get_target_roi(template_path)
+            roi = self.config.get_target_roi(template_path)
 
         if screen_gray is None:
             screen_gray = self.capture_screen()
@@ -643,8 +646,8 @@ class VisionEngine:
 
         # 0. Captcha / Security check
         for key in ["captcha_popup", "captcha_verify", "captcha_ok"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:
@@ -652,49 +655,49 @@ class VisionEngine:
 
         # 1. Error Modal check
         for key in ["error_ok", "error_message", "unknown_error"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:
             return GameScreen.ERROR_MODAL, detected
 
         # 2. Login / MetaMask / Signature check
-        if "confirm_profile_ok" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["confirm_profile_ok"]
+        if "confirm_profile_ok" in self.config.target_images and os.path.exists(
+            self.config.target_images["confirm_profile_ok"]
         ):
             match = self.find_template(
-                config.TARGET_IMAGES["confirm_profile_ok"], screen_gray=screen_gray
+                self.config.target_images["confirm_profile_ok"], screen_gray=screen_gray
             )
             if match:
                 detected["confirm_profile_ok"] = match
                 return GameScreen.CONFIRM_PROFILE, detected
 
-        if "metamask_sign" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["metamask_sign"]
+        if "metamask_sign" in self.config.target_images and os.path.exists(
+            self.config.target_images["metamask_sign"]
         ):
             match = self.find_template(
-                config.TARGET_IMAGES["metamask_sign"], screen_gray=screen_gray
+                self.config.target_images["metamask_sign"], screen_gray=screen_gray
             )
             if match:
                 detected["metamask_sign"] = match
                 return GameScreen.METAMASK_SIGN, detected
 
-        if "select_metamask" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["select_metamask"]
+        if "select_metamask" in self.config.target_images and os.path.exists(
+            self.config.target_images["select_metamask"]
         ):
             match = self.find_template(
-                config.TARGET_IMAGES["select_metamask"], screen_gray=screen_gray
+                self.config.target_images["select_metamask"], screen_gray=screen_gray
             )
             if match:
                 detected["select_metamask"] = match
                 return GameScreen.METAMASK_SELECT, detected
 
-        if "connect_wallet" in config.TARGET_IMAGES and os.path.exists(
-            config.TARGET_IMAGES["connect_wallet"]
+        if "connect_wallet" in self.config.target_images and os.path.exists(
+            self.config.target_images["connect_wallet"]
         ):
             match = self.find_template(
-                config.TARGET_IMAGES["connect_wallet"], screen_gray=screen_gray
+                self.config.target_images["connect_wallet"], screen_gray=screen_gray
             )
             if match:
                 detected["connect_wallet"] = match
@@ -702,8 +705,8 @@ class VisionEngine:
 
         # 3. Map Cleared check
         for key in ["map_complete_button", "map_complete"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:
@@ -711,8 +714,8 @@ class VisionEngine:
 
         # 4. Heroes Modal check
         for key in ["work_all_button", "rest_all_button"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:
@@ -720,8 +723,8 @@ class VisionEngine:
 
         # 5. Main Menu check (Treasure Hunt icon/button)
         for key in ["treasure_hunt_icon", "treasure_hunt_button"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:
@@ -729,8 +732,8 @@ class VisionEngine:
 
         # 6. Treasure Hunt Map check (In-game)
         for key in ["back_button", "bottom_arrow"]:
-            if key in config.TARGET_IMAGES and os.path.exists(config.TARGET_IMAGES[key]):
-                match = self.find_template(config.TARGET_IMAGES[key], screen_gray=screen_gray)
+            if key in self.config.target_images and os.path.exists(self.config.target_images[key]):
+                match = self.find_template(self.config.target_images[key], screen_gray=screen_gray)
                 if match:
                     detected[key] = match
         if detected:

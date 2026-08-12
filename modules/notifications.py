@@ -6,7 +6,7 @@ import json
 import urllib.error
 import urllib.request
 
-import config
+from config import BotConfig
 from modules.logger import logger
 
 
@@ -22,9 +22,9 @@ class NotificationManager:
         max_workers=2, thread_name_prefix="NotificationWorker"
     )
 
-    @staticmethod
-    def send_discord(title: str, message: str, level: str = "info"):
-        webhook_url = getattr(config, "DISCORD_WEBHOOK_URL", "")
+    @classmethod
+    def send_discord(cls, title: str, message: str, level: str = "info"):
+        webhook_url = getattr(cls.config, "discord_webhook_url", "")
         if not webhook_url:
             return False
 
@@ -55,10 +55,10 @@ class NotificationManager:
             logger.warning(f"[NOTIFICATION] Failed to send Discord webhook: {e}")
         return False
 
-    @staticmethod
-    def send_telegram(title: str, message: str, level: str = "info"):
-        token = getattr(config, "TELEGRAM_BOT_TOKEN", "")
-        chat_id = getattr(config, "TELEGRAM_CHAT_ID", "")
+    @classmethod
+    def send_telegram(cls, title: str, message: str, level: str = "info"):
+        token = getattr(cls.config, "telegram_bot_token", "")
+        chat_id = getattr(cls.config, "telegram_chat_id", "")
         if not token or not chat_id:
             return False
 
@@ -92,7 +92,7 @@ class NotificationManager:
 
     @classmethod
     def send_notification(cls, title: str, message: str, level: str = "info", sync: bool = False):
-        if not getattr(config, "ENABLE_NOTIFICATIONS", True):
+        if not getattr(cls.config, "enable_notifications", True):
             return
 
         if sync:

@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from config import BotConfig
 from unittest.mock import MagicMock, patch
 
 import cv2
@@ -13,7 +14,7 @@ from modules.vision import VisionEngine
 class TestVisionEngine(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.vision = VisionEngine()
+        self.vision = VisionEngine(BotConfig())
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
@@ -139,6 +140,7 @@ class TestVisionEngine(unittest.TestCase):
     def test_target_threshold_and_roi_config_resolution(self):
         """Tests automatic lookup of target-specific thresholds and ROIs from config."""
         import config
+        from config import BotConfig
 
         self.assertEqual(config.get_target_threshold("bottom_arrow"), 0.70)
         self.assertEqual(config.get_target_threshold("confirm_profile_ok"), 0.75)

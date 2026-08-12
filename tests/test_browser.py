@@ -1,7 +1,9 @@
 import unittest
+from config import BotConfig
 from unittest.mock import MagicMock, patch
 
 import config
+from config import BotConfig
 from modules.browser import BrowserManager
 
 
@@ -64,7 +66,7 @@ class TestBrowserManager(unittest.TestCase):
     def test_custom_browser_executable_path_override(self, mock_access, mock_exists):
         """Tests custom BROWSER_EXECUTABLE_PATH configuration override."""
         custom_path = "/custom/path/to/mybrowser"
-        with patch.object(config, "BROWSER_EXECUTABLE_PATH", custom_path):
+        with patch.object(BotConfig, "browser_executable_path", custom_path):
             found = BrowserManager.find_browser_executable("brave")
             self.assertEqual(found, custom_path)
 
