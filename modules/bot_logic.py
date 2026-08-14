@@ -859,6 +859,7 @@ class BombCryptoBot:
             f"--- [BOT CYCLE #{self.cycles_completed} START - State: {self.state.name}] ---"
         )
         logger.debug(f"[METRICS] {self.get_stats_summary()}")
+        BrowserManager.focus_game_window()
         self.vision.clear_cache()
 
         if self.check_stuck_timeout() or self.state == BotState.STUCK_RECOVERY:

@@ -316,10 +316,10 @@ class BotConfig:
     hero_modal_max_scrolls: int = HERO_MODAL_MAX_SCROLLS
     enable_home_strategy: bool = ENABLE_HOME_STRATEGY
 
-    # Added fields
-    target_images: dict = field(default_factory=lambda: TARGET_IMAGES)
-    target_thresholds: dict = field(default_factory=lambda: TARGET_THRESHOLDS)
-    target_rois: dict = field(default_factory=lambda: TARGET_ROIS)
+    base_dir: str = BASE_DIR
+    target_images: dict = field(default_factory=lambda: dict(TARGET_IMAGES))
+    target_thresholds: dict = field(default_factory=lambda: dict(TARGET_THRESHOLDS))
+    target_rois: dict = field(default_factory=lambda: dict(TARGET_ROIS))
     debug_dir: str = DEBUG_DIR
     targets_dir: str = TARGETS_DIR
     stamina_crop_xmin_offset: int = STAMINA_CROP_XMIN_OFFSET

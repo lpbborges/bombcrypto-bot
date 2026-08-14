@@ -10,12 +10,16 @@ from modules.vision import VisionEngine
 
 
 class SystemDiagnostic:
+    config: BotConfig | None = None
+
     @classmethod
-    def run_diagnostics(cls, config, verbose=True) -> dict:
+    def run_diagnostics(cls, config=None, verbose=True) -> dict:
         """
         Executes a comprehensive system and configuration check for Bomb Crypto Bot.
         Returns a dictionary of diagnostic results and logs findings.
         """
+        if config is None:
+            config = getattr(cls, "config", None) or BotConfig()
         cls.config = config
         results = {
             "os_info": {},
@@ -190,7 +194,8 @@ class SystemDiagnostic:
         b_info = BrowserManager.get_attached_browser_info()
         b_exe = BrowserManager.find_browser_executable(target_bname)
 
-        print(f"   • Game Version:      {getattr(config, 'GAME_VERSION', 'v13d').upper()}")
+        game_ver = getattr(cls.config, "game_version", getattr(cls.config, "GAME_VERSION", "v13d"))
+        print(f"   • Game Version:      {game_ver.upper()}")
         print(f"   • Target Browser:    {target_bname.capitalize()}")
         print(f"   • Executable Path:   {b_exe or 'Not Found on PATH'}")
         print(f"   • Attached Status:   {b_info['status']}")

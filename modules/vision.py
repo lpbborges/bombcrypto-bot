@@ -323,7 +323,7 @@ class VisionEngine:
                     logger.warning(f"[VISION] CLI screenshot tool '{tool}' failed: {e}")
         return None
 
-    def capture_screen(self, force_refresh=False):
+    def capture_screen(self, force_refresh=False, focus=False):
         """
         Captures the screen and returns a grayscale numpy array.
         Supports Wayland (grim), macOS (screencapture), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
@@ -331,8 +331,7 @@ class VisionEngine:
         """
         from modules.browser import BrowserManager
 
-        # Ensure the browser is focused before taking a screenshot
-        if force_refresh or self._cached_screen is None:
+        if focus:
             BrowserManager.focus_game_window()
 
         if not force_refresh and self._cached_screen is not None:
@@ -392,15 +391,14 @@ class VisionEngine:
 
         return gray_img
 
-    def capture_screen_color(self, force_refresh=False):
+    def capture_screen_color(self, force_refresh=False, focus=False):
         """
         Captures the screen and returns a BGR color numpy array.
         Used for color-sensitive checks like stamina bar HSV color analysis.
         """
         from modules.browser import BrowserManager
 
-        # Ensure the browser is focused before taking a screenshot
-        if force_refresh or getattr(self, "_cached_screen_color", None) is None:
+        if focus:
             BrowserManager.focus_game_window()
 
         if not force_refresh and getattr(self, "_cached_screen_color", None) is not None:

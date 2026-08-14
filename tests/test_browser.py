@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -54,6 +56,21 @@ class TestBrowserManager(unittest.TestCase):
         self.assertTrue(result)
         mock_popen.assert_called_once_with(
             ["/usr/bin/google-chrome", "https://game.bombcrypto.io/test"]
+        )
+
+    @patch("subprocess.Popen")
+    @patch("modules.browser.BrowserManager.find_browser_executable")
+    def test_launch_browser_default_url_fallback(self, mock_find, mock_popen):
+        """Tests that passing url=None falls back to config direct_treasure_url without TypeError."""
+        mock_find.return_value = "/usr/bin/brave-browser"
+        result = BrowserManager.launch_browser(url=None, browser_type="brave")
+
+        self.assertTrue(result)
+        mock_popen.assert_called_once_with(
+            [
+                "/usr/bin/brave-browser",
+                "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure",
+            ]
         )
 
     @patch("webbrowser.open")

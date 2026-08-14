@@ -5,11 +5,17 @@ import concurrent.futures
 import json
 import urllib.error
 import urllib.request
+from typing import TYPE_CHECKING
 
 from modules.logger import logger
 
+if TYPE_CHECKING:
+    from config import BotConfig
+
 
 class NotificationManager:
+    config: BotConfig | None = None
+
     COLOR_MAP = {
         "info": 0x3498DB,
         "success": 0x2ECC71,

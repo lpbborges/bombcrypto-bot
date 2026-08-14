@@ -4,9 +4,13 @@ import os
 import shutil
 import subprocess
 import webbrowser
+from typing import TYPE_CHECKING
 
 from modules import platform_utils
 from modules.logger import logger
+
+if TYPE_CHECKING:
+    from config import BotConfig
 
 # Known executable paths per browser type across platforms
 KNOWN_BROWSER_PATHS = {
@@ -74,8 +78,8 @@ KNOWN_BROWSER_PATHS = {
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
         ],
         "win32": [
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         ],
         "commands": ["microsoft-edge", "msedge", "microsoft-edge-stable"],
     },
@@ -83,12 +87,15 @@ KNOWN_BROWSER_PATHS = {
 
 
 class BrowserManager:
+    config: BotConfig | None = None
+
     @classmethod
     def get_target_browser_name(cls) -> str:
         """Returns normalized target browser type string from config."""
-        if getattr(cls, "config", None) is None:
+        cfg = getattr(cls, "config", None)
+        if cfg is None:
             return "brave"
-        browser_type = getattr(cls.config, "target_browser", "brave").lower()
+        browser_type = getattr(cfg, "target_browser", "brave").lower()
         if browser_type in ("auto", "default", ""):
             return "brave"
         return browser_type
@@ -149,7 +156,9 @@ class BrowserManager:
                                 }
             else:
                 # POSIX (Linux / macOS) ps command process search
-                output = subprocess.check_output(["ps", "-eo", "pid,comm,args"], text=True)
+                output = subprocess.check_output(
+                    ["ps", "-eo", "pid,comm,args"], text=True, timeout=3
+                )
                 for bname, keywords in browser_targets:
                     for line in output.splitlines():
                         line_lower = line.lower()
@@ -205,7 +214,7 @@ class BrowserManager:
         Supports custom override via BROWSER_EXECUTABLE_PATH or environment variable.
         """
         # 1. Custom path override check
-        custom_path = getattr(cls.config, "browser_executable_path", "").strip()
+        custom_path = getattr(getattr(cls, "config", None), "browser_executable_path", "").strip()
         if custom_path and os.path.exists(custom_path) and os.access(custom_path, os.X_OK):
             return custom_path
 
@@ -246,6 +255,13 @@ class BrowserManager:
         """
         if not browser_type:
             browser_type = BrowserManager.get_target_browser_name()
+
+        if not url:
+            url = getattr(
+                getattr(cls, "config", None),
+                "direct_treasure_url",
+                "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure",
+            )
 
         if browser_type == "default":
             logger.info(f"[BROWSER] Opening default system web browser -> {url}")
@@ -313,7 +329,9 @@ class BrowserManager:
                             ):
                                 return clean_token
             else:
-                output = subprocess.check_output(["ps", "-eo", "pid,comm,args"], text=True)
+                output = subprocess.check_output(
+                    ["ps", "-eo", "pid,comm,args"], text=True, timeout=3
+                )
                 for line in output.splitlines():
                     if any(
                         b in line.lower()
@@ -343,10 +361,10 @@ class BrowserManager:
 
                         clients = json.loads(proc.stdout)
                         for c in clients:
-                            cls = c.get("class", "").lower()
+                            win_class = c.get("class", "").lower()
                             title = c.get("title", "")
                             if any(
-                                b in cls
+                                b in win_class
                                 for b in [
                                     "chrome",
                                     "brave",
@@ -600,7 +618,7 @@ class BrowserManager:
         Attempts to read URL directly from browser address bar by triggering Ctrl+L -> Ctrl+C.
         Restores original clipboard content after reading.
         """
-        if getattr(cls.config, "dry_run", False):
+        if getattr(getattr(cls, "config", None), "dry_run", False):
             return None
 
         original_clip = get_clipboard_text()
@@ -706,6 +724,11 @@ class BrowserManager:
         cls.config.direct_treasure_url, and cls.config.direct_landing_mode accordingly.
         Returns the detected or active game version string.
         """
+        if getattr(cls, "config", None) is None:
+            from config import BotConfig
+
+            cls.config = BotConfig()
+
         detected_url = BrowserManager.get_open_browser_url(try_clipboard=try_clipboard)
         detected_ver = BrowserManager.detect_game_version(try_clipboard=try_clipboard)
 
