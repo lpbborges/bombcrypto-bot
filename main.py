@@ -178,7 +178,7 @@ def main():
             cfg.game_version = "v13"
         if "DIRECT_TREASURE_URL" not in os.environ:
             if cfg.game_version == "v10":
-                cfg.direct_treasure_url = "https://game.bombcrypto.io/web/v10l/index.html"
+                cfg.direct_treasure_url = "https://game.bombcrypto.io/web/v10/index.html"
             else:
                 cfg.direct_treasure_url = (
                     "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure"

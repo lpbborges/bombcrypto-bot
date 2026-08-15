@@ -203,7 +203,7 @@ class BombCryptoBot:
     def check_periodic_refresh(self) -> bool:
         """
         Checks if the configured periodic page refresh interval has elapsed.
-        Refreshes browser page (or exits to menu & re-enters map on v10l) to prevent/recover stuck heroes when inner bot is active.
+        Refreshes browser page (or exits to menu & re-enters map on v10) to prevent/recover stuck heroes when inner bot is active.
         """
         interval_mins = getattr(self.config, "refresh_interval_minutes", 0.0)
         if interval_mins <= 0:
@@ -775,8 +775,8 @@ class BombCryptoBot:
     def enter_treasure_hunt(self) -> bool:
         """
         Ensures game is in Treasure Hunt mode.
-        If DIRECT_LANDING_MODE is enabled (default for v13d), the direct URL lands straight into Treasure Hunt.
-        Otherwise (default for v10l), attempts to locate and click the Treasure Hunt icon on the main menu.
+        If DIRECT_LANDING_MODE is enabled (default for v13), the direct URL lands straight into Treasure Hunt.
+        Otherwise (default for v10), attempts to locate and click the Treasure Hunt icon on the main menu.
         """
         if self.config.direct_landing_mode:
             logger.info("[BOT] Direct landing mode active. Skipping main menu icon click.")

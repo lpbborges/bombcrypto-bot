@@ -48,7 +48,7 @@ if "DIRECT_TREASURE_URL" in os.environ:
     DIRECT_TREASURE_URL = os.environ["DIRECT_TREASURE_URL"]
 else:
     if GAME_VERSION == "v10":
-        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v10l/index.html"
+        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v10/index.html"
     else:
         DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure"
 

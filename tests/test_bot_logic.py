@@ -55,7 +55,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         import importlib
         import os
 
-        with patch.dict(os.environ, {"GAME_VERSION": "v10l"}, clear=False):
+        with patch.dict(os.environ, {"GAME_VERSION": "v10"}, clear=False):
             # Temporarily pop direct variables if present to test dynamic defaults
             old_url = os.environ.pop("DIRECT_TREASURE_URL", None)
             old_mode = os.environ.pop("DIRECT_LANDING_MODE", None)
@@ -63,7 +63,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
                 importlib.reload(config)
                 self.assertEqual(config.GAME_VERSION, "v10")
                 self.assertEqual(
-                    config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10l/index.html"
+                    config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10/index.html"
                 )
                 self.assertFalse(config.DIRECT_LANDING_MODE)
             finally:
@@ -203,7 +203,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self, mock_delay, mock_click, mock_capture, mock_find
     ):
         """Tests that v10 mode locates and clicks the treasure hunt icon after refresh/login."""
-        self.bot.config.game_version = "v10l"
+        self.bot.config.game_version = "v10"
         self.bot.config.direct_landing_mode = False
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         mock_find.side_effect = lambda key, **k: (
@@ -216,9 +216,9 @@ class TestBombCryptoBotLogic(unittest.TestCase):
 
     @patch("modules.vision.VisionEngine.find_template", return_value=None)
     @patch("modules.vision.VisionEngine.capture_screen")
-    def test_enter_treasure_hunt_v10l_icon_not_found(self, mock_capture, mock_find):
-        """Tests that v10l mode returns False when treasure hunt icon is not visible."""
-        self.bot.config.game_version = "v10l"
+    def test_enter_treasure_hunt_v10_icon_not_found(self, mock_capture, mock_find):
+        """Tests that v10 mode returns False when treasure hunt icon is not visible."""
+        self.bot.config.game_version = "v10"
         self.bot.config.direct_landing_mode = False
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
         result = self.bot.enter_treasure_hunt()
@@ -610,11 +610,11 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.human_delay")
-    def test_check_periodic_refresh_v10l(
+    def test_check_periodic_refresh_v10(
         self, mock_delay, mock_click_match, mock_capture, mock_find
     ):
-        """Tests v10l periodic refresh clicks back button and re-enters treasure hunt."""
-        self.bot.config.game_version = "v10l"
+        """Tests v10 periodic refresh clicks back button and re-enters treasure hunt."""
+        self.bot.config.game_version = "v10"
         self.bot.config.direct_landing_mode = False
         self.bot.config.refresh_interval_minutes = 15.0
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)
