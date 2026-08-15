@@ -223,9 +223,9 @@ class BombCryptoBot:
                 level="info",
             )
 
-            game_ver = getattr(self.config, "game_version", "v13d").lower()
-            if game_ver == "v10l":
-                logger.info("[BOT REFRESH] Executing v10l refresh...")
+            game_ver = getattr(self.config, "game_version", "v13").lower()
+            if game_ver.startswith("v10"):
+                logger.info(f"[BOT REFRESH] Executing {game_ver.upper()} refresh...")
                 screen = self.vision.capture_screen()
                 back_match = self.vision.find_template(
                     self.config.target_images["back_button"], screen_gray=screen

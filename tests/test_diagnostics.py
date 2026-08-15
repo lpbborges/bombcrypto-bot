@@ -41,7 +41,7 @@ class TestSystemDiagnostics(unittest.TestCase):
         from modules.diagnostics import run_setup_wizard
 
         mock_input.side_effect = [
-            "v13d",  # game version
+            "v13",  # game version
             "30",  # interval
             "brave",  # browser
             "n",  # only refresh on error

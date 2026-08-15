@@ -42,9 +42,8 @@ def parse_args():
     parser.add_argument(
         "--game-version",
         type=str,
-        choices=["auto", "v13d", "v10l"],
         default="auto",
-        help="Game version mode: 'auto', 'v13d', or 'v10l'",
+        help="Game version mode: 'auto', 'v13', or 'v10'",
     )
     parser.add_argument(
         "--interval",
@@ -171,17 +170,21 @@ def main():
         sys.exit(0)
 
     # Apply CLI argument or auto-detected browser URL overrides to config
-    if args.game_version and args.game_version.lower() in ("v13d", "v10l"):
-        cfg.game_version = args.game_version.lower()
+    if args.game_version and args.game_version.lower() not in ("auto", ""):
+        gv = args.game_version.lower()
+        if gv.startswith("v10"):
+            cfg.game_version = "v10"
+        else:
+            cfg.game_version = "v13"
         if "DIRECT_TREASURE_URL" not in os.environ:
-            if cfg.game_version == "v10l":
+            if cfg.game_version == "v10":
                 cfg.direct_treasure_url = "https://game.bombcrypto.io/web/v10l/index.html"
             else:
                 cfg.direct_treasure_url = (
-                    "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+                    "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure"
                 )
         if "DIRECT_LANDING_MODE" not in os.environ:
-            cfg.direct_landing_mode = cfg.game_version == "v13d"
+            cfg.direct_landing_mode = cfg.game_version == "v13"
     else:
         # Auto-detect game version and URL from active open browser tab
         BrowserManager.config = cfg

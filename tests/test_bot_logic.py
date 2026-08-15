@@ -50,8 +50,8 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         # Restore default
         importlib.reload(config)
 
-    def test_env_config_game_version_v10l(self):
-        """Tests GAME_VERSION env variable loading for v10l mode."""
+    def test_env_config_game_version_v10(self):
+        """Tests GAME_VERSION env variable loading for v10 mode."""
         import importlib
         import os
 
@@ -61,7 +61,7 @@ class TestBombCryptoBotLogic(unittest.TestCase):
             old_mode = os.environ.pop("DIRECT_LANDING_MODE", None)
             try:
                 importlib.reload(config)
-                self.assertEqual(config.GAME_VERSION, "v10l")
+                self.assertEqual(config.GAME_VERSION, "v10")
                 self.assertEqual(
                     config.DIRECT_TREASURE_URL, "https://game.bombcrypto.io/web/v10l/index.html"
                 )
@@ -188,9 +188,9 @@ class TestBombCryptoBotLogic(unittest.TestCase):
         self.assertTrue(handled)
         mock_click.assert_called_once()
 
-    def test_enter_treasure_hunt_direct_mode_v13d(self):
-        """Tests direct landing mode in v13d skips menu icon matching."""
-        self.bot.config.game_version = "v13d"
+    def test_enter_treasure_hunt_direct_mode_v13(self):
+        """Tests direct landing mode in v13 skips menu icon matching."""
+        self.bot.config.game_version = "v13"
         self.bot.config.direct_landing_mode = True
         result = self.bot.enter_treasure_hunt()
         self.assertTrue(result)
@@ -199,10 +199,10 @@ class TestBombCryptoBotLogic(unittest.TestCase):
     @patch("modules.vision.VisionEngine.capture_screen")
     @patch("modules.actions.ActionEngine.click_match")
     @patch("modules.actions.ActionEngine.human_delay")
-    def test_enter_treasure_hunt_v10l_click_icon(
+    def test_enter_treasure_hunt_v10_click_icon(
         self, mock_delay, mock_click, mock_capture, mock_find
     ):
-        """Tests that v10l mode locates and clicks the treasure hunt icon after refresh/login."""
+        """Tests that v10 mode locates and clicks the treasure hunt icon after refresh/login."""
         self.bot.config.game_version = "v10l"
         self.bot.config.direct_landing_mode = False
         mock_capture.return_value = np.zeros((100, 100), dtype=np.uint8)

@@ -34,15 +34,23 @@ if os.path.exists(env_file):
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
 # Game Version & Direct Landing Configuration
-GAME_VERSION = os.environ.get("GAME_VERSION", "auto").lower()  # Supported: "auto", "v13d", "v10l"
+_raw_version = os.environ.get("GAME_VERSION", "auto").lower()
+if _raw_version.startswith("v13"):
+    GAME_VERSION = "v13"
+elif _raw_version.startswith("v10"):
+    GAME_VERSION = "v10"
+elif _raw_version in ("auto", "default", ""):
+    GAME_VERSION = "auto"
+else:
+    GAME_VERSION = _raw_version  # Supported: "auto", "v13", "v10"
 
 if "DIRECT_TREASURE_URL" in os.environ:
     DIRECT_TREASURE_URL = os.environ["DIRECT_TREASURE_URL"]
 else:
-    if GAME_VERSION == "v10l":
+    if GAME_VERSION == "v10":
         DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v10l/index.html"
     else:
-        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+        DIRECT_TREASURE_URL = "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure"
 
 if "DIRECT_LANDING_MODE" in os.environ:
     DIRECT_LANDING_MODE = os.environ["DIRECT_LANDING_MODE"].lower() in (
@@ -51,8 +59,8 @@ if "DIRECT_LANDING_MODE" in os.environ:
         "yes",
     )
 else:
-    # v13d directly targets Treasure Hunt URL; v10l requires main menu Treasure Hunt button click
-    DIRECT_LANDING_MODE = GAME_VERSION != "v10l"
+    # v13 directly targets Treasure Hunt URL; v10 requires main menu Treasure Hunt button click
+    DIRECT_LANDING_MODE = GAME_VERSION != "v10"
 
 TARGET_BROWSER = (
     os.environ.get("TARGET_BROWSER", "brave").lower()

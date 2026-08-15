@@ -296,7 +296,7 @@ class BrowserManager:
             url = getattr(
                 getattr(cls, "config", None),
                 "direct_treasure_url",
-                "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure",
+                "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure",
             )
 
         if browser_type == "default":
@@ -353,16 +353,14 @@ class BrowserManager:
                     "powershell",
                     "-NoProfile",
                     "-Command",
-                    "Get-CimInstance Win32_Process | Where-Object {$_.CommandLine -match 'bombcrypto|v13d|v10l'} | Select-Object -ExpandProperty CommandLine",
+                    "Get-CimInstance Win32_Process | Where-Object {$_.CommandLine -match 'bombcrypto|v13|v10'} | Select-Object -ExpandProperty CommandLine",
                 ]
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
                 if proc.returncode == 0:
                     for line in proc.stdout.splitlines():
                         for token in line.split():
                             clean_token = token.strip("'\"")
-                            if any(
-                                k in clean_token.lower() for k in ["bombcrypto", "v13d", "v10l"]
-                            ):
+                            if any(k in clean_token.lower() for k in ["bombcrypto", "v13", "v10"]):
                                 return clean_token
             else:
                 output = subprocess.check_output(
@@ -376,7 +374,7 @@ class BrowserManager:
                         for token in line.split():
                             clean_token = token.strip("'\"")
                             if any(
-                                k in clean_token.lower() for k in ["bombcrypto", "v13d", "v10l"]
+                                k in clean_token.lower() for k in ["bombcrypto", "v13", "v10"]
                             ) and not clean_token.startswith("--"):
                                 return clean_token
         except Exception as e:
@@ -386,7 +384,7 @@ class BrowserManager:
     @classmethod
     def get_browser_window_title(cls) -> str:
         """Gets window title string of active browser window."""
-        game_keywords = ["bombcrypto", "bomb crypto", "bomb_crypto", "bomb-crypto", "v13d", "v10l"]
+        game_keywords = ["bombcrypto", "bomb crypto", "bomb_crypto", "bomb-crypto", "v13", "v10"]
         target_browser = cls.get_target_browser_name()
 
         if platform_utils.is_linux():
@@ -738,16 +736,14 @@ class BrowserManager:
             if new_clip and new_clip != original_clip:
                 if any(
                     k in new_clip.lower()
-                    for k in ["bombcrypto", "v13d", "v10l", "http://", "https://"]
+                    for k in ["bombcrypto", "v13", "v10", "http://", "https://"]
                 ):
                     logger.info(f"[BROWSER] Retrieved URL from browser address bar: {new_clip}")
                     return new_clip
         except Exception as err:
             logger.debug(f"[BROWSER] Clipboard URL fetch notice: {err}")
 
-        if original_clip and any(
-            k in original_clip.lower() for k in ["bombcrypto", "v13d", "v10l"]
-        ):
+        if original_clip and any(k in original_clip.lower() for k in ["bombcrypto", "v13", "v10"]):
             return original_clip
 
         return None
@@ -774,8 +770,7 @@ class BrowserManager:
         ):
             for token in title.split():
                 if any(
-                    k in token.lower()
-                    for k in ["bombcrypto", "v13d", "v10l", "http://", "https://"]
+                    k in token.lower() for k in ["bombcrypto", "v13", "v10", "http://", "https://"]
                 ):
                     return token.strip("'\"()")
 
@@ -787,9 +782,7 @@ class BrowserManager:
 
         # 4. Fallback check on current clipboard content
         clip_text = get_clipboard_text()
-        if clip_text and any(
-            k in clip_text.lower() for k in ["game.bombcrypto.io", "v13d", "v10l"]
-        ):
+        if clip_text and any(k in clip_text.lower() for k in ["game.bombcrypto.io", "v13", "v10"]):
             return clip_text
 
         return None
@@ -797,24 +790,24 @@ class BrowserManager:
     @classmethod
     def detect_game_version(cls, try_clipboard: bool = False) -> str | None:
         """
-        Detects game version ('v13d' or 'v10l') by examining the open browser URL and window title.
-        Returns 'v13d', 'v10l', or None if undetected.
+        Detects game version ('v13' or 'v10') by examining the open browser URL and window title.
+        Returns 'v13', 'v10', or None if undetected.
         """
         url = BrowserManager.get_open_browser_url(try_clipboard=try_clipboard)
         if url:
             url_lower = url.lower()
-            if "v10l" in url_lower:
-                return "v10l"
-            if "v13d" in url_lower:
-                return "v13d"
+            if "v10" in url_lower:
+                return "v10"
+            if "v13" in url_lower:
+                return "v13"
 
         title = BrowserManager.get_browser_window_title()
         if title:
             title_lower = title.lower()
-            if "v10l" in title_lower:
-                return "v10l"
-            if "v13d" in title_lower:
-                return "v13d"
+            if "v10" in title_lower:
+                return "v10"
+            if "v13" in title_lower:
+                return "v13"
 
         return None
 
@@ -837,10 +830,10 @@ class BrowserManager:
             logger.info(f"[BROWSER] Detected open browser URL: {detected_url}")
             cls.config.direct_treasure_url = detected_url
 
-        if detected_ver in ("v13d", "v10l"):
-            old_ver = getattr(cls.config, "game_version", "v13d")
+        if detected_ver in ("v13", "v10"):
+            old_ver = getattr(cls.config, "game_version", "v13")
             cls.config.game_version = detected_ver
-            cls.config.direct_landing_mode = detected_ver == "v13d"
+            cls.config.direct_landing_mode = detected_ver == "v13"
             if old_ver != detected_ver:
                 logger.info(
                     f"[BROWSER] Auto-detected Game Version: {old_ver} -> {detected_ver.upper()}"
@@ -850,12 +843,16 @@ class BrowserManager:
             return detected_ver
         else:
             cur_ver = (
-                getattr(cls.config, "game_version", "v13d")
+                getattr(cls.config, "game_version", "v13")
                 if getattr(cls.config, "game_version", "auto") != "auto"
-                else "v13d"
+                else "v13"
             )
+            if cur_ver.startswith("v13"):
+                cur_ver = "v13"
+            elif cur_ver.startswith("v10"):
+                cur_ver = "v10"
             cls.config.game_version = cur_ver
-            cls.config.direct_landing_mode = cur_ver == "v13d"
+            cls.config.direct_landing_mode = cur_ver == "v13"
             logger.info(f"[BROWSER] Could not auto-detect version. Using: {cur_ver.upper()}")
             return cur_ver
 

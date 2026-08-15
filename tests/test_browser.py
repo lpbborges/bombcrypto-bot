@@ -69,7 +69,7 @@ class TestBrowserManager(unittest.TestCase):
         mock_popen.assert_called_once_with(
             [
                 "/usr/bin/brave-browser",
-                "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure",
+                "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure",
             ]
         )
 
@@ -122,39 +122,39 @@ class TestBrowserManager(unittest.TestCase):
         mock_launch.assert_called_once()
 
     @patch("modules.browser.BrowserManager.get_url_from_process_args")
-    def test_detect_game_version_v10l_url(self, mock_process_url):
-        """Tests auto-detecting v10l from browser process URL."""
+    def test_detect_game_version_v10_url(self, mock_process_url):
+        """Tests auto-detecting v10 from browser process URL."""
         mock_process_url.return_value = "https://game.bombcrypto.io/web/v10l/index.html"
         version = BrowserManager.detect_game_version()
-        self.assertEqual(version, "v10l")
+        self.assertEqual(version, "v10")
 
     @patch("modules.browser.BrowserManager.get_url_from_process_args")
-    def test_detect_game_version_v13d_url(self, mock_process_url):
-        """Tests auto-detecting v13d from browser process URL."""
+    def test_detect_game_version_v13_url(self, mock_process_url):
+        """Tests auto-detecting v13 from browser process URL with v13e or v13d."""
         mock_process_url.return_value = (
-            "https://game.bombcrypto.io/web/v13d/index.html?landing=treasure"
+            "https://game.bombcrypto.io/web/v13e/index.html?landing=treasure"
         )
         version = BrowserManager.detect_game_version()
-        self.assertEqual(version, "v13d")
+        self.assertEqual(version, "v13")
 
     @patch("modules.browser.BrowserManager.get_url_from_process_args", return_value=None)
     @patch("modules.browser.BrowserManager.get_browser_window_title")
-    def test_detect_game_version_v10l_window_title(self, mock_title, mock_process_url):
-        """Tests auto-detecting v10l from active browser window title."""
-        mock_title.return_value = "Bomb Crypto Game - v10l"
+    def test_detect_game_version_v10_window_title(self, mock_title, mock_process_url):
+        """Tests auto-detecting v10 from active browser window title."""
+        mock_title.return_value = "Bomb Crypto Game - v10"
         version = BrowserManager.detect_game_version()
-        self.assertEqual(version, "v10l")
+        self.assertEqual(version, "v10")
 
     @patch("modules.browser.BrowserManager.detect_game_version")
     @patch("modules.browser.BrowserManager.get_open_browser_url")
     def test_sync_game_version_from_browser(self, mock_url, mock_version):
         """Tests syncing config GAME_VERSION and DIRECT_LANDING_MODE based on detected URL."""
         mock_url.return_value = "https://game.bombcrypto.io/web/v10l/index.html"
-        mock_version.return_value = "v10l"
+        mock_version.return_value = "v10"
 
         synced_ver = BrowserManager.sync_game_version_from_browser()
-        self.assertEqual(synced_ver, "v10l")
-        self.assertEqual(BrowserManager.config.game_version, "v10l")
+        self.assertEqual(synced_ver, "v10")
+        self.assertEqual(BrowserManager.config.game_version, "v10")
         self.assertFalse(BrowserManager.config.direct_landing_mode)
         self.assertEqual(
             BrowserManager.config.direct_treasure_url,

@@ -188,7 +188,7 @@ class SystemDiagnostic:
         b_info = BrowserManager.get_attached_browser_info()
         b_exe = BrowserManager.find_browser_executable(target_bname)
 
-        game_ver = getattr(cls.config, "game_version", getattr(cls.config, "GAME_VERSION", "v13d"))
+        game_ver = getattr(cls.config, "game_version", getattr(cls.config, "GAME_VERSION", "v13"))
         print(f"   • Game Version:      {game_ver.upper()}")
         print(f"   • Target Browser:    {target_bname.capitalize()}")
         print(f"   • Executable Path:   {b_exe or 'Not Found on PATH'}")
@@ -230,9 +230,8 @@ def run_setup_wizard():
     print("==================================================\n")
     print("This wizard will help you configure your bot settings in '.env'.\n")
 
-    default_version = (
-        input("Game version (v13d / v10l) [default: v13d]: ").strip().lower() or "v13d"
-    )
+    raw_ver = input("Game version (v13 / v10) [default: v13]: ").strip().lower() or "v13"
+    default_version = "v10" if raw_ver.startswith("v10") else "v13"
     default_interval = input("Hero work interval in minutes (default: 30): ").strip() or "30"
     default_browser = (
         input(

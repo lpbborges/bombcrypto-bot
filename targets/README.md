@@ -21,7 +21,7 @@ Save your small screen crops (PNG format) inside this `targets/` folder accordin
 
 ## Execution Workflow
 
-1. Start on direct URL: `https://game.bombcrypto.io/web/v13d/index.html?landing=treasure`
+1. Start on direct URL: `https://game.bombcrypto.io/web/v13e/index.html?landing=treasure`
 2. Click **Confirm Profile "OK"** button (`confirm_profile_ok.png`).
 3. Click **Connect Wallet** (`connect_wallet.png`) -> Sign MetaMask (`metamask_sign.png` if required).
 4. Wait for Treasure Hunt map to load.
