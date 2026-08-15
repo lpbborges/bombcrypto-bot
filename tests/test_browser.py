@@ -180,17 +180,20 @@ class TestBrowserManager(unittest.TestCase):
     @patch("modules.platform_utils.is_linux", return_value=True)
     @patch("shutil.which")
     @patch("subprocess.run")
-    def test_focus_game_window_linux_gtk_launch(self, mock_run, mock_which, mock_is_linux):
-        """Tests focusing game window on Linux GNOME Wayland via gtk-launch."""
-        mock_which.side_effect = lambda cmd: cmd == "gtk-launch"
+    def test_focus_game_window_linux_hyprctl(self, mock_run, mock_which, mock_is_linux):
+        """Tests focusing game window on Linux Hyprland via hyprctl."""
+        mock_which.side_effect = lambda cmd: cmd == "hyprctl"
 
         mock_res = MagicMock()
         mock_res.returncode = 0
+        mock_res.stdout = '[{"address": "0x55bef7a7d990", "class": "brave-browser", "title": "Bomb Crypto - Play"}]'
         mock_run.return_value = mock_res
 
         result = BrowserManager.focus_game_window()
         self.assertTrue(result)
-        mock_run.assert_called()
+        mock_run.assert_called_with(
+            ["hyprctl", "dispatch", "focuswindow", "address:0x55bef7a7d990"], timeout=2
+        )
 
     @patch("modules.platform_utils.is_linux", return_value=False)
     @patch("modules.platform_utils.is_windows", return_value=True)

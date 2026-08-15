@@ -18,11 +18,19 @@ KNOWN_BROWSER_PATHS = {
         "linux": [
             "/opt/brave.com/brave-origin-beta/brave",
             "/opt/brave.com/brave/brave",
+            "/opt/brave-origin-bin/brave",
+            "/opt/brave-bin/brave",
             "/usr/bin/brave-browser",
             "/usr/bin/brave",
+            "/usr/bin/brave-origin",
+            "/usr/bin/brave-bin",
             "/usr/bin/brave-beta",
+            "/usr/bin/brave-browser-beta",
+            "/usr/bin/brave-browser-nightly",
             "/snap/bin/brave",
             "/snap/bin/brave-browser",
+            "/var/lib/flatpak/exports/bin/com.brave.Browser",
+            os.path.expanduser("~/.local/share/flatpak/exports/bin/com.brave.Browser"),
         ],
         "darwin": [
             "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
@@ -33,7 +41,14 @@ KNOWN_BROWSER_PATHS = {
             r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
             os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
         ],
-        "commands": ["brave-browser", "brave", "brave-beta"],
+        "commands": [
+            "brave-browser",
+            "brave",
+            "brave-origin",
+            "brave-origin-beta",
+            "brave-bin",
+            "brave-beta",
+        ],
     },
     "chrome": {
         "linux": [
@@ -42,6 +57,8 @@ KNOWN_BROWSER_PATHS = {
             "/usr/bin/chromium-browser",
             "/usr/bin/chromium",
             "/snap/bin/chromium",
+            "/var/lib/flatpak/exports/bin/org.chromium.Chromium",
+            os.path.expanduser("~/.local/share/flatpak/exports/bin/org.chromium.Chromium"),
         ],
         "darwin": [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -59,6 +76,8 @@ KNOWN_BROWSER_PATHS = {
             "/usr/bin/firefox",
             "/usr/bin/firefox-developer-edition",
             "/snap/bin/firefox",
+            "/var/lib/flatpak/exports/bin/org.mozilla.firefox",
+            os.path.expanduser("~/.local/share/flatpak/exports/bin/org.mozilla.firefox"),
         ],
         "darwin": [
             "/Applications/Firefox.app/Contents/MacOS/firefox",
@@ -73,6 +92,8 @@ KNOWN_BROWSER_PATHS = {
         "linux": [
             "/usr/bin/microsoft-edge",
             "/usr/bin/microsoft-edge-stable",
+            "/usr/bin/microsoft-edge-beta",
+            "/usr/bin/microsoft-edge-dev",
         ],
         "darwin": [
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
@@ -111,14 +132,29 @@ class BrowserManager:
         browser_targets = [
             (
                 "Brave Browser",
-                ["brave-origin-beta", "brave-browser", "brave"],
+                [
+                    "brave-origin-beta",
+                    "brave-origin",
+                    "brave-browser",
+                    "brave-bin",
+                    "brave",
+                    "com.brave.browser",
+                ],
             ),
-            ("Google Chrome / Chromium", ["google-chrome", "chrome", "chromium"]),
-            ("Mozilla Firefox", ["firefox"]),
+            (
+                "Google Chrome / Chromium",
+                ["google-chrome", "chrome", "chromium", "org.chromium.chromium"],
+            ),
+            ("Mozilla Firefox", ["firefox", "org.mozilla.firefox"]),
             ("Microsoft Edge", ["msedge", "edge", "microsoft-edge"]),
             ("Opera Browser", ["opera"]),
             ("Vivaldi Browser", ["vivaldi"]),
         ]
+        # Prioritize configured target browser first
+        ordered_targets = sorted(
+            browser_targets,
+            key=lambda item: 0 if any(target_name in k for k in item[1]) else 1,
+        )
         ignore_terms = [
             "crashpad",
             "renderer",
@@ -143,7 +179,7 @@ class BrowserManager:
                 if proc.returncode == 0:
                     for line in proc.stdout.splitlines():
                         line_clean = line.replace('"', "").lower()
-                        for bname, keywords in browser_targets:
+                        for bname, keywords in ordered_targets:
                             if any(k in line_clean for k in keywords):
                                 parts = [p.strip('"') for p in line.split('","')]
                                 pid = parts[1] if len(parts) > 1 else "N/A"
@@ -159,7 +195,7 @@ class BrowserManager:
                 output = subprocess.check_output(
                     ["ps", "-eo", "pid,comm,args"], text=True, timeout=3
                 )
-                for bname, keywords in browser_targets:
+                for bname, keywords in ordered_targets:
                     for line in output.splitlines():
                         line_lower = line.lower()
                         if any(k in line_lower for k in keywords) and not any(
@@ -350,6 +386,9 @@ class BrowserManager:
     @classmethod
     def get_browser_window_title(cls) -> str:
         """Gets window title string of active browser window."""
+        game_keywords = ["bombcrypto", "bomb crypto", "bomb_crypto", "bomb-crypto", "v13d", "v10l"]
+        target_browser = cls.get_target_browser_name()
+
         if platform_utils.is_linux():
             if shutil.which("hyprctl"):
                 try:
@@ -360,10 +399,11 @@ class BrowserManager:
                         import json
 
                         clients = json.loads(proc.stdout)
+                        # Pass 1: Look for any browser client whose title contains game keywords
                         for c in clients:
                             win_class = c.get("class", "").lower()
                             title = c.get("title", "")
-                            if any(
+                            is_browser = any(
                                 b in win_class
                                 for b in [
                                     "chrome",
@@ -374,11 +414,69 @@ class BrowserManager:
                                     "vivaldi",
                                     "chromium",
                                 ]
+                            )
+                            if is_browser and any(k in title.lower() for k in game_keywords):
+                                return title
+
+                        # Pass 2: Look for target browser client
+                        for c in clients:
+                            win_class = c.get("class", "").lower()
+                            title = c.get("title", "")
+                            if target_browser in win_class and title:
+                                return title
+
+                        # Pass 3: Any browser client
+                        for c in clients:
+                            win_class = c.get("class", "").lower()
+                            title = c.get("title", "")
+                            if (
+                                any(
+                                    b in win_class
+                                    for b in [
+                                        "chrome",
+                                        "brave",
+                                        "firefox",
+                                        "edge",
+                                        "opera",
+                                        "vivaldi",
+                                        "chromium",
+                                    ]
+                                )
+                                and title
                             ):
-                                if title:
-                                    return title
+                                return title
                 except Exception as e:
-                    logger.debug(f"Exception caught: {e}", exc_info=True)
+                    logger.debug(f"Exception caught in hyprctl title: {e}", exc_info=True)
+
+            if shutil.which("wmctrl"):
+                try:
+                    proc = subprocess.run(
+                        ["wmctrl", "-l", "-x"], capture_output=True, text=True, timeout=2
+                    )
+                    if proc.returncode == 0:
+                        lines = proc.stdout.splitlines()
+                        for line in lines:
+                            line_lower = line.lower()
+                            is_browser = any(
+                                b in line_lower
+                                for b in [
+                                    "chrome",
+                                    "brave",
+                                    "firefox",
+                                    "edge",
+                                    "opera",
+                                    "vivaldi",
+                                    "chromium",
+                                ]
+                            )
+                            if is_browser and any(k in line_lower for k in game_keywords):
+                                parts = line.split(None, 4)
+                                if len(parts) >= 5:
+                                    return parts[4]
+                                return line
+                except Exception as e:
+                    logger.debug(f"Exception caught in wmctrl title: {e}", exc_info=True)
+
             if shutil.which("xdotool"):
                 try:
                     proc = subprocess.run(
@@ -390,7 +488,7 @@ class BrowserManager:
                     if proc.returncode == 0 and proc.stdout.strip():
                         return proc.stdout.strip()
                 except Exception as e:
-                    logger.debug(f"Exception caught: {e}", exc_info=True)
+                    logger.debug(f"Exception caught in xdotool title: {e}", exc_info=True)
         elif platform_utils.is_windows():
             try:
                 cmd = [
@@ -426,7 +524,7 @@ class BrowserManager:
         Returns True if successful.
         """
         target_browser = cls.get_target_browser_name()
-        game_keywords = ["bombcrypto"]
+        game_keywords = ["bombcrypto", "bomb crypto", "bomb_crypto", "bomb-crypto"]
 
         if platform_utils.is_linux():
             if shutil.which("hyprctl"):
@@ -530,25 +628,28 @@ class BrowserManager:
             if shutil.which("xdotool"):
                 try:
                     # Priority 1: Game keywords, ensuring it's a browser class
-                    proc = subprocess.run(
-                        [
-                            "xdotool",
-                            "search",
-                            "--class",
-                            "chrome|brave|firefox|edge|opera|vivaldi|chromium",
-                            "--name",
-                            "bombcrypto",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=2,
-                    )
-                    if proc.returncode == 0 and proc.stdout.strip():
-                        win_ids = proc.stdout.strip().splitlines()
-                        for win_id in reversed(win_ids):
-                            res = subprocess.run(["xdotool", "windowactivate", win_id], timeout=2)
-                            if res.returncode == 0:
-                                return True
+                    for kw in game_keywords:
+                        proc = subprocess.run(
+                            [
+                                "xdotool",
+                                "search",
+                                "--class",
+                                "chrome|brave|firefox|edge|opera|vivaldi|chromium",
+                                "--name",
+                                kw,
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=2,
+                        )
+                        if proc.returncode == 0 and proc.stdout.strip():
+                            win_ids = proc.stdout.strip().splitlines()
+                            for win_id in reversed(win_ids):
+                                res = subprocess.run(
+                                    ["xdotool", "windowactivate", win_id], timeout=2
+                                )
+                                if res.returncode == 0:
+                                    return True
 
                     # Priority 2: Target browser
                     proc = subprocess.run(
@@ -565,34 +666,6 @@ class BrowserManager:
                                 return True
                 except Exception as e:
                     logger.debug(f"Exception in xdotool focus: {e}")
-
-            if shutil.which("gtk-launch"):
-                desktop_map = {
-                    "brave": ["brave-browser", "brave"],
-                    "chrome": [
-                        "google-chrome",
-                        "google-chrome-stable",
-                        "chromium-browser",
-                        "chromium",
-                    ],
-                    "firefox": ["firefox", "firefox_firefox"],
-                    "edge": ["microsoft-edge", "microsoft-edge-stable"],
-                    "opera": ["opera"],
-                    "vivaldi": ["vivaldi-stable"],
-                }
-                candidates = desktop_map.get(target_browser, [target_browser])
-                for app_name in candidates:
-                    try:
-                        res = subprocess.run(
-                            ["gtk-launch", app_name],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            timeout=2,
-                        )
-                        if res.returncode == 0:
-                            return True
-                    except Exception as e:
-                        logger.debug(f"Exception in gtk-launch focus: {e}")
 
         elif platform_utils.is_windows():
             try:
