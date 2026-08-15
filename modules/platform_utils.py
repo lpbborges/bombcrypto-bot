@@ -17,4 +17,29 @@ def is_linux() -> bool:
 
 
 def is_wayland() -> bool:
-    return is_linux() and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+    return is_linux() and (
+        os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+        or "WAYLAND_DISPLAY" in os.environ
+    )
+
+
+def is_gnome() -> bool:
+    if not is_linux():
+        return False
+    desktop = (
+        os.environ.get("XDG_CURRENT_DESKTOP", "")
+        + ":"
+        + os.environ.get("DESKTOP_SESSION", "")
+        + ":"
+        + os.environ.get("GDMSESSION", "")
+    ).lower()
+    return "gnome" in desktop or "ubuntu" in desktop
+
+
+def is_hyprland() -> bool:
+    if not is_linux():
+        return False
+    desktop = (
+        os.environ.get("XDG_CURRENT_DESKTOP", "") + ":" + os.environ.get("DESKTOP_SESSION", "")
+    ).lower()
+    return "hyprland" in desktop or "HYPRLAND_INSTANCE_SIGNATURE" in os.environ

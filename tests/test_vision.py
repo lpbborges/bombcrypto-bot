@@ -191,32 +191,56 @@ class TestVisionEngine(unittest.TestCase):
         """Tests that Wayland-specific error advice is logged on Linux/Wayland capture failures."""
         self.vision.use_wayland_grim = False
 
-        # 1. On Wayland without working capture -> Wayland Xorg instruction logged
+        # 1. On Wayland without working capture -> Wayland instruction logged
         with (
-            patch("modules.vision.sys.platform", "linux"),
-            patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}),
+            patch("modules.vision.platform_utils.is_linux", return_value=True),
+            patch("modules.vision.platform_utils.is_wayland", return_value=True),
             patch("modules.vision.shutil.which", return_value=None),
             patch.object(self.vision, "_capture_via_mss", return_value=None),
             patch.object(self.vision, "_capture_via_pil_imagegrab", return_value=None),
             patch.object(self.vision, "_capture_via_cli_utils", return_value=None),
+            patch.object(self.vision, "_capture_via_gnome_dbus", return_value=None),
             self.assertLogs("BombCryptoBot", level="ERROR") as cm,
         ):
             self.vision.capture_screen(force_refresh=True)
-            self.assertTrue(any("Ubuntu on Xorg" in log for log in cm.output))
+            self.assertTrue(any("failed on Wayland" in log for log in cm.output))
 
         # 2. On X11 / non-Wayland -> standard error logged without Wayland instruction
         self.vision.clear_cache()
         with (
-            patch("modules.vision.sys.platform", "linux"),
-            patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}, clear=True),
+            patch("modules.vision.platform_utils.is_linux", return_value=True),
+            patch("modules.vision.platform_utils.is_wayland", return_value=False),
             patch("modules.vision.shutil.which", return_value=None),
             patch.object(self.vision, "_capture_via_mss", return_value=None),
             patch.object(self.vision, "_capture_via_pil_imagegrab", return_value=None),
             patch.object(self.vision, "_capture_via_cli_utils", return_value=None),
+            patch.object(self.vision, "_capture_via_gnome_dbus", return_value=None),
             self.assertLogs("BombCryptoBot", level="ERROR") as cm,
         ):
             self.vision.capture_screen(force_refresh=True)
-            self.assertFalse(any("Ubuntu on Xorg" in log for log in cm.output))
+            self.assertFalse(any("failed on Wayland" in log for log in cm.output))
+
+    def test_gnome_dbus_screen_capture(self):
+        """Tests screen capture via GNOME Shell DBus service."""
+        dummy_img = np.ones((50, 50, 3), dtype=np.uint8) * 128
+        tmp_target = os.path.join(tempfile.gettempdir(), f"bot_screen_gnome_{os.getpid()}.png")
+
+        def fake_run(cmd, capture_output=True, timeout=5):
+            cv2.imwrite(tmp_target, dummy_img)
+            return unittest.mock.MagicMock(returncode=0)
+
+        with (
+            patch("modules.vision.platform_utils.is_linux", return_value=True),
+            patch("modules.vision.shutil.which", return_value="/usr/bin/gdbus"),
+            patch("modules.vision.subprocess.run", side_effect=fake_run),
+        ):
+            gray = self.vision._capture_via_gnome_dbus()
+            self.assertIsNotNone(gray)
+            self.assertEqual(gray.shape, (50, 50))
+
+            color = self.vision._capture_via_gnome_dbus_color()
+            self.assertIsNotNone(color)
+            self.assertEqual(color.shape, (50, 50, 3))
 
     def test_identify_screen_various_states(self):
         """Tests screen identification for various game screens."""

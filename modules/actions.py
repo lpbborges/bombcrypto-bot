@@ -192,6 +192,16 @@ class ActionEngine:
                 )
             except Exception as e:
                 logger.debug(f"Exception caught: {e}", exc_info=True)
+        elif HAS_YDOTOOL and platform_utils.is_wayland():
+            try:
+                subprocess.run(
+                    ["ydotool", "mousemove", "-a", str(end_x), str(end_y)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+            except Exception as e:
+                logger.debug(f"Exception caught: {e}", exc_info=True)
 
     def human_delay(
         self,
@@ -372,6 +382,31 @@ class ActionEngine:
             logger.info(f"[DRY-RUN] [ACTION] Would navigate to URL: {url}")
             return
 
+        if HAS_YDOTOOL and platform_utils.is_wayland():
+            try:
+                subprocess.run(
+                    ["ydotool", "key", "29:1", "38:1", "38:0", "29:0"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                time.sleep(0.3)
+                subprocess.run(
+                    ["ydotool", "type", url],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                time.sleep(0.1)
+                subprocess.run(
+                    ["ydotool", "key", "28:1", "28:0"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+            except Exception as err:
+                logger.debug(f"[ACTION] ydotool URL navigation notice: {err}")
+
         try:
             pyautogui.hotkey("ctrl", "l")
             time.sleep(0.5)
@@ -392,6 +427,17 @@ class ActionEngine:
             if getattr(self.config, "dry_run", False):
                 logger.info("[DRY-RUN] [ACTION] Would press F5 to refresh page")
                 return
+
+            if HAS_YDOTOOL and platform_utils.is_wayland():
+                try:
+                    subprocess.run(
+                        ["ydotool", "key", "63:1", "63:0"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=2,
+                    )
+                except Exception as err:
+                    logger.debug(f"[ACTION] ydotool F5 refresh notice: {err}")
 
             try:
                 pyautogui.press("f5")
@@ -485,7 +531,46 @@ class ActionEngine:
             except Exception as err:
                 logger.debug(f"[ACTION] uinput drag-scroll notice: {err}")
 
-        # 3. xdotool drag (Linux X11)
+        # 3. ydotool drag (Linux Wayland fallback)
+        if HAS_YDOTOOL and platform_utils.is_wayland():
+            try:
+                subprocess.run(
+                    ["ydotool", "mousemove", "-a", str(start_x), str(start_y)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                time.sleep(0.06)
+                subprocess.run(
+                    ["ydotool", "click", "0x40"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                time.sleep(0.06)
+                steps = 15
+                for i in range(1, steps + 1):
+                    cur_x = int(start_x + (end_x - start_x) * (i / steps))
+                    cur_y = int(start_y + (end_y - start_y) * (i / steps))
+                    subprocess.run(
+                        ["ydotool", "mousemove", "-a", str(cur_x), str(cur_y)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=2,
+                    )
+                    time.sleep(max(0.01, duration / steps))
+                time.sleep(0.06)
+                subprocess.run(
+                    ["ydotool", "click", "0x80"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                return
+            except Exception as err:
+                logger.debug(f"[ACTION] ydotool drag-scroll notice: {err}")
+
+        # 4. xdotool drag (Linux X11)
         if HAS_XDOTOOL:
             try:
                 subprocess.run(
@@ -510,7 +595,7 @@ class ActionEngine:
             except Exception as err:
                 logger.debug(f"[ACTION] xdotool drag-scroll notice: {err}")
 
-        # 4. PyAutoGUI drag fallback
+        # 5. PyAutoGUI drag fallback
         try:
             pyautogui.moveTo(start_x, start_y)
             pyautogui.dragTo(end_x, end_y, duration=duration, button="left")

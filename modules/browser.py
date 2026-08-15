@@ -566,6 +566,34 @@ class BrowserManager:
                 except Exception as e:
                     logger.debug(f"Exception in xdotool focus: {e}")
 
+            if shutil.which("gtk-launch"):
+                desktop_map = {
+                    "brave": ["brave-browser", "brave"],
+                    "chrome": [
+                        "google-chrome",
+                        "google-chrome-stable",
+                        "chromium-browser",
+                        "chromium",
+                    ],
+                    "firefox": ["firefox", "firefox_firefox"],
+                    "edge": ["microsoft-edge", "microsoft-edge-stable"],
+                    "opera": ["opera"],
+                    "vivaldi": ["vivaldi-stable"],
+                }
+                candidates = desktop_map.get(target_browser, [target_browser])
+                for app_name in candidates:
+                    try:
+                        res = subprocess.run(
+                            ["gtk-launch", app_name],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2,
+                        )
+                        if res.returncode == 0:
+                            return True
+                    except Exception as e:
+                        logger.debug(f"Exception in gtk-launch focus: {e}")
+
         elif platform_utils.is_windows():
             try:
                 cmd_game = [

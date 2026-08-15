@@ -164,6 +164,72 @@ class VisionEngine:
             logger.debug(f"Exception caught: {e}", exc_info=True)
         return None
 
+    def _capture_via_gnome_dbus(self):
+        """Captures screen on GNOME Wayland via org.gnome.Shell.Screenshot DBus service."""
+        if not platform_utils.is_linux() or not shutil.which("gdbus"):
+            return None
+        tmp_path = os.path.join(tempfile.gettempdir(), f"bot_screen_gnome_{os.getpid()}.png")
+        try:
+            cmd = [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.gnome.Shell.Screenshot",
+                "--object-path",
+                "/org/gnome/Shell/Screenshot",
+                "--method",
+                "org.gnome.Shell.Screenshot.Screenshot",
+                "false",
+                "false",
+                tmp_path,
+            ]
+            res = subprocess.run(cmd, capture_output=True, timeout=5)
+            if res.returncode == 0 and os.path.exists(tmp_path):
+                img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    logger.debug(f"Exception caught removing tmp screen: {e}", exc_info=True)
+                if img_np is not None and img_np.size > 0:
+                    return img_np
+        except Exception as e:
+            logger.debug(f"[VISION] GNOME DBus screen capture failed: {e}", exc_info=True)
+        return None
+
+    def _capture_via_gnome_dbus_color(self):
+        """Captures screen as BGR color on GNOME Wayland via org.gnome.Shell.Screenshot DBus service."""
+        if not platform_utils.is_linux() or not shutil.which("gdbus"):
+            return None
+        tmp_path = os.path.join(tempfile.gettempdir(), f"bot_screen_gnome_{os.getpid()}.png")
+        try:
+            cmd = [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.gnome.Shell.Screenshot",
+                "--object-path",
+                "/org/gnome/Shell/Screenshot",
+                "--method",
+                "org.gnome.Shell.Screenshot.Screenshot",
+                "false",
+                "false",
+                tmp_path,
+            ]
+            res = subprocess.run(cmd, capture_output=True, timeout=5)
+            if res.returncode == 0 and os.path.exists(tmp_path):
+                img_np = cv2.imread(tmp_path, cv2.IMREAD_COLOR)
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    logger.debug(f"Exception caught removing tmp screen: {e}", exc_info=True)
+                if img_np is not None and img_np.size > 0:
+                    return img_np
+        except Exception as e:
+            logger.debug(f"[VISION] GNOME DBus color capture failed: {e}", exc_info=True)
+        return None
+
     def _capture_via_mac_screencapture(self):
         """Captures screen on macOS using native 'screencapture' tool."""
         if sys.platform != "darwin" or not shutil.which("screencapture"):
@@ -299,20 +365,24 @@ class VisionEngine:
             logger.warning(f"[VISION] PIL ImageGrab screen capture failed: {e}")
         return None
 
-    def _capture_via_cli_utils(self):
-        """Attempts screen capture using CLI utilities like gnome-screenshot, scrot, import, or maim."""
+    def _capture_via_cli_utils(self, color=False):
+        """Attempts screen capture using CLI utilities like gnome-screenshot, spectacle, scrot, import, or maim."""
+        read_flag = cv2.IMREAD_COLOR if color else cv2.IMREAD_GRAYSCALE
         for tool, cmd in [
             ("gnome-screenshot", ["gnome-screenshot", "-f"]),
+            ("spectacle", ["spectacle", "-b", "-n", "-o"]),
             ("scrot", ["scrot"]),
             ("import", ["import", "-window", "root"]),
             ("maim", ["maim"]),
         ]:
             if shutil.which(tool):
-                tmp_path = os.path.join(tempfile.gettempdir(), f"bot_screen_{tool}.png")
+                tmp_path = os.path.join(
+                    tempfile.gettempdir(), f"bot_screen_{tool}_{os.getpid()}.png"
+                )
                 try:
                     res = subprocess.run(cmd + [tmp_path], capture_output=True, timeout=5)
                     if res.returncode == 0 and os.path.exists(tmp_path):
-                        img_np = cv2.imread(tmp_path, cv2.IMREAD_GRAYSCALE)
+                        img_np = cv2.imread(tmp_path, read_flag)
                         try:
                             os.remove(tmp_path)
                         except Exception as e:
@@ -326,7 +396,7 @@ class VisionEngine:
     def capture_screen(self, force_refresh=False, focus=False):
         """
         Captures the screen and returns a grayscale numpy array.
-        Supports Wayland (grim), macOS (screencapture), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
+        Supports Wayland (grim, GNOME DBus), macOS (screencapture), X11 (mss with monitor fallbacks), PIL ImageGrab, and CLI tools.
         Saves debug_last_screen.png.
         """
         from modules.browser import BrowserManager
@@ -343,38 +413,39 @@ class VisionEngine:
         if self.use_wayland_grim:
             gray_img = self._capture_via_grim()
 
-        # 2. macOS native screencapture
+        # 2. GNOME DBus capture on Linux Wayland (e.g. Ubuntu GNOME)
+        if gray_img is None and platform_utils.is_wayland():
+            gray_img = self._capture_via_gnome_dbus()
+
+        # 3. macOS native screencapture
         if gray_img is None and platform_utils.is_mac():
             gray_img = self._capture_via_mac_screencapture()
 
-        # 3. Capture via MSS (X11 / Windows / macOS) with error and bounds handling
+        # 4. Capture via MSS (X11 / Windows / macOS) with error and bounds handling
         if gray_img is None:
             try:
                 gray_img = self._capture_via_mss()
             except Exception as e:
                 logger.warning(f"[VISION] _capture_via_mss error: {e}")
 
-        # 4. Fallback to grim if mss failed and grim exists
+        # 5. Fallback to grim if mss failed and grim exists
         if gray_img is None and shutil.which("grim"):
             gray_img = self._capture_via_grim()
 
-        # 5. Fallback to PIL ImageGrab
-        if gray_img is None:
-            gray_img = self._capture_via_pil_imagegrab()
-
-        # 6. Fallback to CLI screenshot tools (gnome-screenshot, scrot, import, maim)
+        # 6. Fallback to CLI screenshot tools (gnome-screenshot, spectacle, scrot, import, maim)
         if gray_img is None:
             gray_img = self._capture_via_cli_utils()
 
-        # 7. Fallback if all screen capture methods failed
+        # 7. Fallback to PIL ImageGrab
         if gray_img is None:
-            is_wayland = platform_utils.is_linux() and (
-                "WAYLAND_DISPLAY" in os.environ or os.environ.get("XDG_SESSION_TYPE") == "wayland"
-            )
-            if is_wayland:
+            gray_img = self._capture_via_pil_imagegrab()
+
+        # 8. Fallback if all screen capture methods failed
+        if gray_img is None:
+            if platform_utils.is_wayland():
                 logger.error(
-                    "[VISION] All screen capture methods failed on Wayland. Note: On Ubuntu GNOME, 'grim' is unsupported by Mutter compositor. "
-                    "RECOMMENDED FIX: Log out and select 'Ubuntu on Xorg' at the login screen (⚙️ icon)."
+                    "[VISION] All screen capture methods failed on Wayland. "
+                    "For Ubuntu GNOME, ensure DBus screenshot or gnome-screenshot is available (`sudo apt install gnome-screenshot`)."
                 )
             else:
                 logger.error(
@@ -408,8 +479,14 @@ class VisionEngine:
         if self.use_wayland_grim:
             bgr_img = self._capture_via_grim_color()
 
+        if bgr_img is None and platform_utils.is_wayland():
+            bgr_img = self._capture_via_gnome_dbus_color()
+
         if bgr_img is None:
             bgr_img = self._capture_via_mss_color()
+
+        if bgr_img is None:
+            bgr_img = self._capture_via_cli_utils(color=True)
 
         if bgr_img is None:
             try:

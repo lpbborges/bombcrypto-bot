@@ -134,13 +134,7 @@ class SystemDiagnostic:
                 if max_val == 0:
                     print(f"   • [WARN] Screen capture returned black frame ({w}x{h}).")
                     print(
-                        "     -> Note: On Ubuntu GNOME (Wayland), 'grim' is not supported by Mutter compositor."
-                    )
-                    print(
-                        "     -> RECOMMENDED FIX: Log out and select 'Ubuntu on Xorg' at the login screen (⚙️ icon)."
-                    )
-                    print(
-                        "     -> ALTERNATIVE: Install gnome-screenshot (`sudo apt install gnome-screenshot`)."
+                        "     -> Note: On Ubuntu GNOME (Wayland), ensure gdbus or gnome-screenshot (`sudo apt install gnome-screenshot`) is available."
                     )
                     results["screen_capture"]["status"] = "WARN: Black Screen"
                     results["warnings_count"] += 1

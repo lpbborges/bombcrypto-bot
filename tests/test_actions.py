@@ -179,6 +179,31 @@ class TestActionEngine(unittest.TestCase):
         mock_moveto.assert_called_with(500, 600)
         mock_dragto.assert_called_once_with(500, 400, duration=0.35, button="left")
 
+    @patch("modules.actions.HAS_XDOTOOL", False)
+    @patch("modules.actions.HAS_HYPRCTL", False)
+    @patch("modules.actions.UINPUT_MOUSE", None)
+    @patch("modules.actions.HAS_YDOTOOL", True)
+    @patch("modules.actions.platform_utils.is_wayland", return_value=True)
+    @patch("subprocess.run")
+    def test_drag_scroll_ydotool_wayland(self, mock_run, mock_is_wayland):
+        """Tests drag_scroll on Wayland using ydotool."""
+        mock_run.return_value = MagicMock(returncode=0)
+        self.action_engine.drag_scroll(100, 200, 100, 400, duration=0.1)
+        self.assertGreaterEqual(mock_run.call_count, 3)
+
+    @patch("modules.actions.HAS_XDOTOOL", False)
+    @patch("modules.actions.HAS_HYPRCTL", False)
+    @patch("modules.actions.UINPUT_MOUSE", None)
+    @patch("modules.actions.HAS_YDOTOOL", True)
+    @patch("modules.actions.platform_utils.is_wayland", return_value=True)
+    @patch("subprocess.run")
+    def test_click_at_ydotool_wayland(self, mock_run, mock_is_wayland):
+        """Tests click_at on Wayland using ydotool."""
+        mock_run.return_value = MagicMock(returncode=0)
+        self.action_engine.config.use_bezier_curves = False
+        self.action_engine.click_at(150, 250, offset=0)
+        self.assertGreaterEqual(mock_run.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

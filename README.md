@@ -128,14 +128,16 @@ All settings can be specified via command-line arguments or saved in a `.env` fi
 
 ## 🔧 Platform-Specific Notes & Troubleshooting
 
-### 🐧 Linux (Wayland vs X11)
-- **Wayland (Ubuntu / GNOME / Sway / Hyprland)**:
-  - **Sway / Hyprland / wlroots**: Uses `grim` for screen capture (`sudo apt install grim` or `sudo pacman -S grim`).
-  - **Ubuntu GNOME (Mutter)**: GNOME's Mutter compositor does **not** support `grim`. If `grim` returns black or fails on Ubuntu GNOME:
-    - **Recommended Solution**: Switch to **Ubuntu on Xorg**. Log out, click your username, click the gear icon (⚙️) in the bottom-right corner, select **"Ubuntu on Xorg"**, and log in.
-    - **Alternative**: Install `gnome-screenshot` (`sudo apt install gnome-screenshot`).
-- **Mouse Input Backends**: Supports PyAutoGUI, `/dev/uinput` kernel device, `ydotool`, `xdotool`, and Hyprland `hyprctl`.
-- **Window Focusing**: To auto-focus the game browser tab before screenshots on X11, install `wmctrl` or `xdotool` (`sudo apt install wmctrl xdotool`). For Wayland users on Hyprland, `hyprctl` is used natively.
+### 🐧 Linux (Wayland & X11)
+- **Ubuntu GNOME (Wayland)**:
+  - **Screen Capture**: Native support via GNOME Shell DBus (`org.gnome.Shell.Screenshot`), `gnome-screenshot` (`sudo apt install gnome-screenshot`), and `mss`.
+  - **Mouse & Keyboard Automation**: Native support via `ydotool` (`sudo apt install ydotool`) and `/dev/uinput` kernel device (`sudo usermod -aG input $USER`).
+  - **Window Focusing**: Supported via `gtk-launch`, `wmctrl`, and `xdotool`.
+- **Hyprland / Sway / wlroots**:
+  - Uses `grim` for native screen capture (`sudo apt install grim` or `sudo pacman -S grim`) and `hyprctl` for window management and cursor dispatch.
+- **X11 / Xorg**:
+  - Full support out-of-the-box via `mss`, `pyautogui`, `wmctrl`, and `xdotool`.
+
 
 ### 🪟 Windows
 - PyAutoGUI standard mouse automation and MSS screen capture work out-of-the-box. Run terminal as Administrator if interacting with elevated browser windows.

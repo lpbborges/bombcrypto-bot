@@ -177,6 +177,21 @@ class TestBrowserManager(unittest.TestCase):
         self.assertTrue(result)
         mock_run.assert_called_with(["wmctrl", "-i", "-a", "0x02000003"], timeout=2)
 
+    @patch("modules.platform_utils.is_linux", return_value=True)
+    @patch("shutil.which")
+    @patch("subprocess.run")
+    def test_focus_game_window_linux_gtk_launch(self, mock_run, mock_which, mock_is_linux):
+        """Tests focusing game window on Linux GNOME Wayland via gtk-launch."""
+        mock_which.side_effect = lambda cmd: cmd == "gtk-launch"
+
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_run.return_value = mock_res
+
+        result = BrowserManager.focus_game_window()
+        self.assertTrue(result)
+        mock_run.assert_called()
+
     @patch("modules.platform_utils.is_linux", return_value=False)
     @patch("modules.platform_utils.is_windows", return_value=True)
     @patch("subprocess.run")
